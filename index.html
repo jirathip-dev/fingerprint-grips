@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fingerprint Grips: custom finger-training grippers</title>
+    <meta name="description" content="Type in your finger sizes and download a 3D-printable FDP or FDS roller gripper fitted to your hand." />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="panel">
+        <h1>Fingerprint Grips</h1>
+        <p class="lede">Pick a gripper, type in your finger sizes, check the 3D preview, download files ready for your 3D printer.</p>
+
+        <form id="hand-form" autocomplete="off">
+          <fieldset class="choice device">
+            <legend>Gripper</legend>
+            <label><input type="radio" name="device" value="fdp" checked /> <b>FDP</b> <span>claw / tips</span></label>
+            <label><input type="radio" name="device" value="fds" /> <b>FDS</b> <span>middle segment</span></label>
+          </fieldset>
+          <p id="device-blurb" class="blurb"></p>
+
+          <fieldset class="choice side">
+            <legend>Hand</legend>
+            <label><input type="radio" name="side" value="right" checked /> Right</label>
+            <label><input type="radio" name="side" value="left" /> Left</label>
+          </fieldset>
+
+          <div class="grid" id="finger-grid"></div>
+
+          <details class="how">
+            <summary>How do I measure?</summary>
+            <ol>
+              <li>Palm up, hand flat, fingers straight. A ruler or calipers, in millimetres.</li>
+              <li><b>Length:</b> the crease where the finger meets the palm, to the very tip.</li>
+              <li><b>Middle:</b> middle knuckle crease to the end-joint crease.</li>
+              <li><b>Tip:</b> end-joint crease to the very tip.</li>
+              <li><b>Width:</b> widest point of the tip segment, side to side.</li>
+              <li>Measure twice and use the average. Half millimetres are fine.</li>
+            </ol>
+          </details>
+
+          <ul id="problems" class="problems" hidden></ul>
+
+          <label class="ack"><input type="checkbox" id="ack" /> I understand this is an untested prototype and I'll start light.</label>
+          <div class="actions">
+            <button type="button" id="download" class="primary">Download print files</button>
+            <button type="button" id="reset">Reset</button>
+          </div>
+          <p id="status" class="status" role="status">Loading the CAD engine…</p>
+        </form>
+
+        <div id="summary" class="summary"></div>
+        <p class="banner" role="note"><b>Untested prototype.</b> The fit rules come from the Open Grips project, but no part from this tool has been printed and load-tested yet. Start with light loads, check for cracks after every session, and train over padding.</p>
+        <p class="credits">Inspired by <a href="https://handofgod.shop" target="_blank" rel="noopener">The Hand of God</a> (David Quinn). Geometry from <a href="https://github.com/opengrips/Open_Grips" target="_blank" rel="noopener">Open Grips</a> (CC0). Independent project, not affiliated.</p>
+      </section>
+      <section id="viewport" class="viewport" aria-label="3D preview">
+        <label class="xray"><input type="checkbox" id="xray" checked /> See-through frame</label>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
