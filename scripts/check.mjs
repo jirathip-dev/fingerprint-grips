@@ -5,7 +5,7 @@
 //  2. rollers clear the frame and clear each other
 //  3. slices don't overlap each other (they assemble)
 //  4. each roller pin hole is blind: open toward its roller, closed to the outside
-//  5. the cord tunnel is enclosed: a solid shell all round, open only at the top
+//  5. the cord tunnel is enclosed (open only at two top holes), holes >= 55% of the width apart, centred on the load centre
 //  6. FDP: roof, ledge behind the roller, closed back. FDS: open back, V roof, roller = middle segment
 //  7. the finger can get in: open from below, in front of the roller, up to the roof (both)
 //  8. every roller is a spool: raised rims, concave waist
@@ -96,21 +96,30 @@ for (const device of ["fdp", "fds"]) {
       for (const xo of outer) if (!solidAt(frame, [X(xo), s.yc, s.zc], 0.3)) fail(`${tag} ${s.name} pin hole breaks through its wall`);
     }
 
-    // 5. cord tunnel: enclosed shell all round, open only at the top
+    // 5. cord tunnel: enclosed shell all round, open only at the two top holes
     const c = L.cord;
     const shell = 3;
-    const env = box(c.x - c.bend - c.half - shell, c.x + c.bend + c.half + shell, c.y - c.half - shell, c.y + c.half + shell, c.bottom - shell, L.zTop - 0.01);
+    const MX = (x) => (side === "left" ? L.width - x : x);
+    const env = box(c.xa - c.half - shell, c.xb + c.half + shell, c.y - c.half - shell, c.y + c.half + shell, c.bottom - shell, L.zTop - 0.01);
     const envX = side === "left" ? env.clone().mirror("YZ", [L.width / 2, 0, 0]) : env;
-    const shellSolid = common(frame, envX);
-    const envVol = vol(envX.clone());
-    const tunnelVol = envVol - shellSolid;
-    const tunnelExpected = 2 * c.half * (2 * c.half * (L.zTop - c.zc) * 2 + (Math.PI * ((c.bend + c.half) ** 2 - (c.bend - c.half) ** 2)) / 2);
-    if (Math.abs(tunnelVol - tunnelExpected) / tunnelExpected > 0.12)
+    const tunnelVol = vol(envX.clone()) - common(frame, envX);
+    // U profile area below the top face: outer rounded rect minus inner, bottom corners rounded
+    const k = 2 * (1 - Math.PI / 4);
+    const ro = c.bend + c.half, ri = c.bend - c.half;
+    const area = (c.xb - c.xa + 2 * c.half) * (L.zTop - c.bottom) - k * ro ** 2 - ((c.xb - c.xa - 2 * c.half) * (L.zTop - c.zh - c.half) - k * ri ** 2);
+    const tunnelExpected = area * 2 * c.half;
+    if (Math.abs(tunnelVol - tunnelExpected) / tunnelExpected > 0.08)
       fail(`${tag} cord tunnel is not enclosed (air ${tunnelVol.toFixed(0)} mm3, expected ~${tunnelExpected.toFixed(0)})`);
-    if (!solidAt(frame, [X(c.x), c.y, c.bottom - 1.5], 0.5)) fail(`${tag} no solid floor under the cord bend`);
-    if (solidAt(frame, [X(c.x - c.bend), c.y, L.zTop - 1], 0.5) || solidAt(frame, [X(c.x + c.bend), c.y, L.zTop - 1], 0.5))
-      fail(`${tag} cord holes are not open at the top`);
+    if (!solidAt(frame, [MX(c.x), c.y, c.bottom - 1.5], 0.5)) fail(`${tag} no solid floor under the cord run`);
+    if (!solidAt(frame, [MX(c.x), c.y, c.zh + c.half + 1.5], 0.5)) fail(`${tag} no solid roof over the cord run`);
+    for (const xh of [c.xa, c.xb]) if (!airAt(frame, [MX(xh), c.y, L.zTop - 1], 0.5)) fail(`${tag} cord hole at x=${xh.toFixed(0)} is not open at the top`);
     if (c.bottom - shell < L.maxCav) fail(`${tag} cord tunnel breaks into a finger slot`);
+    // HoG-style wide stance, centred on the finger load centre so it hangs level (spec, not layout)
+    const share = { index: 0.27, middle: 0.33, ring: 0.26, pinky: 0.14 };
+    const loadX = L.slots.reduce((sum, s) => sum + share[s.name] * (s.xs + s.w / 2), 0);
+    if (c.xb - c.xa < 0.55 * L.width) fail(`${tag} cord holes only ${(c.xb - c.xa).toFixed(0)} mm apart (want >= 55% of the ${L.width.toFixed(0)} mm width)`);
+    if (Math.abs((c.xa + c.xb) / 2 - loadX) > 1) fail(`${tag} cord holes are not centred on the load centre (${((c.xa + c.xb) / 2).toFixed(1)} vs ${loadX.toFixed(1)})`);
+    if (c.xa - c.half < DIM.wall || c.xb + c.half > L.width - DIM.wall) fail(`${tag} cord hole breaks out of the end wall`);
 
     // 6-8. finger features
     for (const s of L.slots) {

@@ -25,8 +25,10 @@ This is an independent hobby project, not affiliated with or endorsed by The Han
 Both: every roller is a spool (raised rims both ends, concave waist that centres
 the finger). The hand is below and in front: each finger comes up in front of its
 roller and hooks over it, so everything below and in front of the rollers is open.
-Both: the cord goes down into the top block, round a U-bend tunnel, and back
-out, over the load centre so the gripper hangs level. No external loop to snap.
+Both: the cord goes down one hole in the top block, along a tunnel and up the
+other hole. The holes sit about 65% of the width apart (a wide, stable stance)
+and are centred on the finger load centre, so the gripper hangs level. No
+external loop to snap.
 
 > Status: prototype. Fit rules come from the Open Grips project and have not
 > been validated on printed parts. FDS roof gap, spool waist depth (10% of
@@ -63,7 +65,7 @@ Builds FDP and FDS, right and left, and fails on any of:
 - a part that is not a closed solid, or an STL with open edges
 - a roller touching the frame or another roller; slices overlapping
 - a pin hole that is blocked or breaks through the outside of its wall
-- a cord tunnel that is not fully enclosed, has no floor, is closed at the top, or breaks into a finger slot
+- a cord tunnel that is not fully enclosed, has no floor or roof, is closed at the top, breaks into a finger slot, has holes closer than 55% of the width, or is off the load centre
 - a finger can't get in: no open path from below, in front of the roller, up over it to the roof
 - a roller without raised rims or a waist, or a waist deeper than 3 mm
 - FDP: no roof, roof gap closed, no ledge behind the roller or ledge above the roller top, back open

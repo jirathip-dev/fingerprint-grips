@@ -19,7 +19,10 @@
 // Each slice = a divider wall + the solid that shapes that finger's slot
 // (roof / blocker / ledge). Each roller spins on its own 3 mm steel pin held in
 // blind holes in the two walls beside it. Three M4 threaded rods clamp the stack.
-// The cord goes down into the top block, through a U-shaped tunnel, and back out.
+// The cord goes down into the top block near one end, along a tunnel, and back out near
+// the other end (holes about 2/3 of the width apart, as on the HoG Micro). The two holes
+// are centred on the finger load centre, so a sliding cord hangs the gripper level and
+// the wide stance stops it rolling.
 
 export const FINGERS = ["pinky", "ring", "middle", "index"]; // x order for a right hand
 
@@ -63,7 +66,9 @@ export const DIM = {
   boreR: 1.75, // roller bore, spins on the pin
   rodR: 2.2, // M4 threaded rod
   cordHalf: 3.5, // tunnel half-width -> 7 mm, for 5-6 mm accessory cord
-  cordBend: 7, // tunnel centreline bend radius
+  cordBend: 7, // tunnel centreline bend radius at the two corners
+  cordSpread: 0.65, // hole spacing as a share of the frame width
+  cordEdge: 12, // hole centre at least this far from either end of the frame
   topBlock: 34, // solid block above the highest slot (cord tunnel + clamp rods)
   corner: 5,
   // every roller is a spool: raised rims at both ends, a concave waist that centres the finger
@@ -200,8 +205,11 @@ export function layout(device, hand) {
     { y: -8, z: zTop - 26 },
     device === "fds" ? { y: ycMax / 2, z: zBottom + DIM.fds.rail / 2 } : { y: -DIM.fdp.spine / 2, z: zBottom + 5 },
   ];
-  const cord = { x: anchorX, y: yF / 2, zc: zTop - 9, bend: DIM.cordBend, half: DIM.cordHalf };
-  cord.bottom = cord.zc - cord.bend - cord.half;
+  // holes symmetric about the load centre; shrink the spread rather than go off-centre
+  const spread = 2 * Math.min(DIM.cordSpread * width / 2, anchorX - DIM.cordEdge, width - DIM.cordEdge - anchorX);
+  const cord = { x: anchorX, xa: anchorX - spread / 2, xb: anchorX + spread / 2, spread, y: yF / 2, bend: DIM.cordBend, half: DIM.cordHalf };
+  cord.zh = zTop - 16; // centreline of the run along the top block
+  cord.bottom = cord.zh - cord.half;
   for (const s of slots) s.pinLength = round1(s.w + 2 * DIM.pinDepth - 0.5);
 
   return { device, slots, width, endX, yF, zBottom, zTop, maxCav, anchorX, rods, cord };
@@ -300,18 +308,12 @@ function makeRoller(r, s) {
   return bored.translate([s.xs + DIM.rollerSide, s.yc, s.zc]);
 }
 
-/** U-shaped cord tunnel inside the top block: down one hole, round the bend, up the other. */
+/** Cord tunnel inside the top block: down at xa, along the block, up at xb, rounded corners. */
 function cordTunnel(r, L) {
-  const { x, y, zc, bend, half } = L.cord;
-  const arc = r
-    .drawCircle(bend + half)
-    .cut(r.drawCircle(bend - half))
-    .intersect(r.drawRectangle(2 * (bend + half) + 2, bend + half + 1).translate([0, -(bend + half + 1) / 2]))
-    .translate([x, zc]);
-  // legs overlap the bend by 1 mm: a hairline overlap leaves sliver faces that tessellate open
-  const legH = L.zTop + 3 - zc + 1;
-  const legs = [-1, 1].map((k) => r.drawRectangle(2 * half, legH).translate([x + k * bend, zc - 1 + legH / 2]));
-  const profile = arc.fuse(legs[0]).fuse(legs[1]);
+  const { xa, xb, y, zh, bend, half } = L.cord;
+  const top = L.zTop + 3 + bend + half; // top corners of both rectangles sit above the frame
+  const rr = (x0, x1, z0, z1, rad) => r.drawRoundedRectangle(x1 - x0, z1 - z0, rad).translate([(x0 + x1) / 2, (z0 + z1) / 2]);
+  const profile = rr(xa - half, xb + half, zh - half, top, bend + half).cut(rr(xa + half, xb - half, zh + half, top + 5, bend - half));
   const solid = profile.sketchOnPlane("XZ").extrude(2 * half);
   const [lo, hi] = solid.boundingBox.bounds;
   return solid.translate([0, y - (lo[1] + hi[1]) / 2, 0]);
@@ -334,7 +336,7 @@ function summarize(L, side) {
     width: L.width,
     depth: -L.yF,
     height: L.zTop - L.zBottom,
-    cord: { x: side === "left" ? L.width - L.cord.x : L.cord.x, diameter: 2 * L.cord.half },
+    cord: { x: side === "left" ? L.width - L.cord.x : L.cord.x, diameter: 2 * L.cord.half, spread: round1(L.cord.spread) },
     slots: L.slots.map((s) => ({
       name: s.name,
       rollerDiameter: round1(2 * s.r),
