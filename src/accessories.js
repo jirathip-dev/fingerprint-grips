@@ -32,12 +32,13 @@ export const ADDON_DIM = {
   rod: { r: 2.25, z: 6 }, // M4 threaded rod along each rail clamps the printed pieces together
   palm: { root: 52, top: 18, arc: 7, notch: 10 }, // solid rest: base, top, rounding; notch = cord slot for leg push
   travel: 50, // the cord length sets where the gripper sits: 0-50 mm from the palm rest
+  legReach: 260, // preview only: leg push, gripper this far in front of the rest (in your hands)
   cordGap: 14, // gripper top (at its furthest) to the Tindeq: room for the knot
   maxPiece: 236, // longest printed piece (A1 bed is 256 mm)
   tindeq: { floor: 6, guideH: 14, guideT: 4, clear: 4, clip: 34 }, // clip = carabiner / short cord to the wall
   wall: { t: 20, window: 16, over: 14, buttress: 15 }, // anchor wall: carabiner/cord window + bridge above it
   spring: { carriage: 18, preload: 1, cordHole: 12, post: 10, seat: 1.5, rodHole: 2.4 },
-  foot: { len: 230, width: 160, t: 8, rib: { n: 5, h: 14, t: 8 }, lugL: 70, lugT: 20, holeD: 14, holeZ: 26, over: 18, apex: 250, footW: 110 },
+  foot: { len: 230, width: 160, t: 11, lugL: 70, lugT: 20, holeD: 14, holeZ: 26, over: 18, apex: 250, footW: 110 },
 };
 
 export const LOADS = ["tindeq", "springs", "both"];
@@ -248,10 +249,9 @@ export function footLayout() {
   const F = RATING.foot * 9.81 * DESIGN_FACTOR;
   const yLug = P.width / 2 - P.lugT / 2;
   const gap = P.width - 2 * P.lugT; // room for the foot between the lugs
-  const ribTop = P.t + P.rib.h;
+  const ribTop = P.t; // smooth top: no ribs, the plate is just thicker
   const zHole = P.t + P.holeZ;
   const lugTop = zHole + (P.holeD / 2) * Math.SQRT2 + P.over; // the cord wraps this bridge and leaves from here
-  const ribX = Array.from({ length: P.rib.n }, (_, i) => P.rib.t / 2 + (i * (P.len - P.rib.t)) / (P.rib.n - 1));
   const tanT = yLug / P.apex; // each cord's angle from vertical
   const Pv = F / 2; // per lug, up
   const Ph = Pv * tanT; // per lug, sideways toward the foot
@@ -259,20 +259,17 @@ export function footLayout() {
   const items = [];
   const add = (part, mpa, allow) => items.push({ part, value: round1(mpa), allow, unit: "MPa", ok: mpa <= allow });
   // plate bends across, between the lugs: foot load ~25 mm either side of the middle.
-  // Ribs run across too, so they stiffen exactly this. Effective width: the lug plus a 45° spread.
+  // Smooth solid plate. Effective width: the lug plus a 45° spread.
   const lever = yLug - 25;
   const beff = Math.min(P.len, P.lugL + 2 * lever);
-  const nEff = ribX.filter((x) => Math.abs(x - P.len / 2) <= beff / 2).length;
-  const Ap = beff * P.t, Ar = nEff * P.rib.t * P.rib.h;
-  const zN = (Ap * P.t / 2 + Ar * (P.t + P.rib.h / 2)) / (Ap + Ar);
-  const I = (beff * P.t ** 3) / 12 + Ap * (zN - P.t / 2) ** 2 + (nEff * P.rib.t * P.rib.h ** 3) / 12 + Ar * (P.t + P.rib.h / 2 - zN) ** 2;
-  const cMax = Math.max(zN, ribTop - zN);
+  const I = (beff * P.t ** 3) / 12;
+  const cMax = P.t / 2;
   add("plate bending (between the lugs)", (Pv * lever * cMax) / I, ALLOW.inLayer);
   add("lug legs (across layers)", Pv / (2 * P.lugT * (P.lugL / 2 - P.holeD / 2)), ALLOW.acrossLayer);
   add("lug root (pull + sideways)", Pv / (P.lugL * P.lugT) + (6 * Ph * P.holeZ) / (P.lugL * P.lugT ** 2), ALLOW.acrossLayer);
   add("bridge over the hole (bending)", (6 * ((Pc * P.holeD) / 8)) / (P.lugT * P.over ** 2), ALLOW.inLayer);
   add("bridge over the hole (layer shear)", (1.5 * (Pc / 2)) / (P.lugT * P.over), ALLOW.acrossLayer);
-  return { ...P, yLug, gap, ribTop, zHole, lugTop, ribX, screen: { kg: RATING.foot, forceN: round1(F), items }, pieces: [[0, P.len]] };
+  return { ...P, yLug, gap, ribTop, zHole, lugTop, screen: { kg: RATING.foot, forceN: round1(F), items }, pieces: [[0, P.len]] };
 }
 
 // ---------------------------------------------------------------- solids
@@ -342,9 +339,6 @@ function buildCarriage(r, R) {
 
 export function buildFoot(r, P = footLayout()) {
   let s = box(r, 0, P.len, -P.width / 2, P.width / 2, 0, P.t);
-  // ribs across the plate (prints plate-down, no supports): they stiffen the span between the
-  // lugs and give the sole some grip
-  for (const x of P.ribX) s = s.fuse(box(r, x - P.rib.t / 2, x + P.rib.t / 2, -P.width / 2, P.width / 2, P.t - 0.5, P.ribTop));
   // a lug on each long edge, mid-length (beside the arch / ankle), hole across it, point up
   const x0 = P.len / 2 - P.lugL / 2, x1 = P.len / 2 + P.lugL / 2;
   const rr = P.holeD / 2;
@@ -399,6 +393,9 @@ export function footGhosts(r, P = footLayout()) {
     const L = Math.hypot(dy, dz);
     ghosts.push({ name: "cord", kind: "cord", shape: r.makeCylinder(2.5, L, [P.len / 2, k * P.yLug, z0], [0, dy / L, dz / L]) });
   }
+  // top eye -> gripper (preview only)
+  const zTopEye = z0 + T.length / 2 + T.eyePitch / 2;
+  ghosts.push({ name: "cord", kind: "cord", shape: r.makeCylinder(2.5, z0 + T.length + 45 - zTopEye, [P.len / 2, 0, zTopEye], [0, 0, 1]) });
   return { ghosts, gripperTop: z0 + T.length + 45 };
 }
 

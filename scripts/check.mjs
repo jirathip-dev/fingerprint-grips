@@ -6,7 +6,7 @@
 //  2. rollers clear the frame and clear each other
 //  3. slices don't overlap each other (they assemble)
 //  4. each roller pin hole is blind: open toward its roller, closed to the outside
-//  5. the cord tunnel is enclosed (open only at two top holes), holes >= 55% of the width apart, centred on the load centre
+//  5. the cord tunnel is enclosed (open only at two top holes), holes >= 55% of the width apart, dead centre (same distance from both ends)
 //  6. FDP: roof, ledge behind the roller, closed back. FDS: open back, V roof, roller = middle segment
 //  7. the finger can get in: open from below, in front of the roller, up to the roof (both)
 //  8. every roller is a spool: raised rims, concave waist
@@ -141,11 +141,24 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
     if (!solidAt(frame, [MX(c.x), c.y, c.zh + c.half + 1.5], 0.5)) fail(`${tag} no solid roof over the cord run`);
     for (const xh of [c.xa, c.xb]) if (!airAt(frame, [MX(xh), c.y, L.zTop - 1], 0.5)) fail(`${tag} cord hole at x=${xh.toFixed(0)} is not open at the top`);
     if (c.bottom - shell < L.maxCav) fail(`${tag} cord tunnel breaks into a finger slot`);
-    // HoG-style wide stance, centred on the finger load centre so it hangs level (spec, not layout)
-    const share = { index: 0.27, middle: 0.33, ring: 0.26, pinky: 0.14 };
-    const loadX = L.slots.reduce((sum, s) => sum + share[s.name] * (s.xs + s.w / 2), 0);
+    // HoG-style wide stance, dead centre: measured from the real holes in the frame, not the layout
     if (c.xb - c.xa < 0.55 * L.width) fail(`${tag} cord holes only ${(c.xb - c.xa).toFixed(0)} mm apart (want >= 55% of the ${L.width.toFixed(0)} mm width)`);
-    if (Math.abs((c.xa + c.xb) / 2 - loadX) > 1) fail(`${tag} cord holes are not centred on the load centre (${((c.xa + c.xb) / 2).toFixed(1)} vs ${loadX.toFixed(1)})`);
+    {
+      // scan the top face for the two holes, then compare their gaps to each end
+      const fb = frame.boundingBox.bounds, holes = [];
+      let inHole = false, start = 0;
+      for (let x = fb[0][0] + 0.25; x < fb[1][0]; x += 0.5) {
+        const air = airAt(frame, [x, c.y, L.zTop - 1], 0.2);
+        if (air && !inHole) start = x;
+        if (!air && inHole) holes.push((start + x - 0.5) / 2);
+        inHole = air;
+      }
+      if (holes.length !== 2) fail(`${tag} expected 2 cord holes in the top, found ${holes.length}`);
+      else {
+        const left = holes[0] - fb[0][0], right = fb[1][0] - holes[1];
+        if (Math.abs(left - right) > 1) fail(`${tag} cord holes are off-centre: ${left.toFixed(1)} mm from one end, ${right.toFixed(1)} mm from the other`);
+      }
+    }
     if (c.xa - c.half < DIM.wall || c.xb + c.half > L.width - DIM.wall) fail(`${tag} cord hole breaks out of the end wall`);
 
     // 6-8. finger features
@@ -305,7 +318,7 @@ for (const device of ["fdp", "fds"]) {
   const [foot] = buildFoot(r, P);
   await stlCheck("foot", foot);
   if (P.gap < FOOT_W) fail(`foot plate: only ${P.gap} mm between the lugs, a foot needs ${FOOT_W}`);
-  if (common(foot.shape, r.makeBox([20, -FOOT_W / 2, P.ribTop + 0.2], [P.len - 20, FOOT_W / 2, P.ribTop + 40])) > 0.5) fail("foot plate: something sticks up where the foot goes");
+  if (common(foot.shape, r.makeBox([0.5, -FOOT_W / 2, P.t + 0.1], [P.len - 0.5, FOOT_W / 2, P.t + 40])) > 0.5) fail("foot plate: something sticks up where the foot goes (the top must be smooth)");
   for (const k of [-1, 1]) {
     const yl = k * P.yLug;
     for (const dy of [-P.lugT / 2 + 0.6, 0, P.lugT / 2 - 0.6]) if (!airAt(foot.shape, [P.len / 2, yl + dy, P.zHole], 1)) fail(`foot plate: lug hole blocked at y=${(yl + dy).toFixed(0)}`);
@@ -331,8 +344,10 @@ if (validateSpring({ ...SPRING_DEFAULT, count: 3 }).length === 0) fail("3 spring
   // 4 x 22 mm: fits across the rails, but the 2 x 2 block doesn't fit under the FDS cord line
   const tall = rigLayout(g.layout, g.info, { wire: 2.5, od: 22, length: 60, coils: 10, count: 4 });
   if (!tall.problems.some((p) => p.includes("under the cord line"))) fail("4 x 22 mm springs were laid out even though they can't fit under the cord line");
-  const fat = rigLayout(g.layout, g.info, { wire: 3.5, od: 30, length: 60, coils: 10, count: 2 });
-  if (!fat.problems.some((p) => p.includes("too fat"))) fail("2 x 30 mm springs were laid out even though the carriage can't fit between the rails");
+  // the validator stops at 30 mm OD; the layout must still refuse a carriage wider than the rails
+  // (2 x 48 mm: carriage about 2 x 61.5 mm vs 2 x 60 mm between the rails)
+  const fat = rigLayout(g.layout, g.info, { wire: 5, od: 48, length: 80, coils: 10, count: 2 });
+  if (!fat.problems.some((p) => p.includes("too fat"))) fail("2 x 48 mm springs were laid out even though the carriage can't fit between the rails");
 }
 if (validateSpring(SPRING_DEFAULT).length) fail("the default spring was rejected: " + validateSpring(SPRING_DEFAULT)[0]);
 

@@ -3,7 +3,7 @@ import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
 import * as replicad from "replicad";
 import { buildGripper, printOrient, validate } from "./model.js";
-import { rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, placeOverFoot, printOrientAddon, validateSpring, massG, SPRING_DEFAULT, ADDON_DIM } from "./accessories.js";
+import { rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, placeOverFoot, printOrientAddon, validateSpring, massG, SPRING_DEFAULT, ADDON_DIM, TINDEQ } from "./accessories.js";
 
 const ready = (async () => {
   const OC = await opencascade({ locateFile: () => wasmUrl });
@@ -36,7 +36,22 @@ function buildAddon(addon, gripper, spring, load, brace) {
   if (R.problems?.length) throw Object.assign(new Error(R.problems[0]), { problems: R.problems });
   const parts = buildRig(replicad, R);
   const info = { ...addonInfo("platform", R, parts), load, brace, notch: ADDON_DIM.palm.notch };
-  return { parts, ghosts: rigGhosts(replicad, R, load), info, place: (s) => placeInRig(s, gripper.layout, R.zl, R.gripperX0) };
+  // Palm push: gripper on the ledges. Leg push: same print, but the gripper is in your hands
+  // in front of the rest (feet on the rest's front face), cord through the slot in the rest.
+  const L = gripper.layout, Hg = L.zTop - L.zBottom;
+  const x0 = brace === "legs" ? -Hg - ADDON_DIM.legReach : R.gripperX0;
+  const ghosts = [...rigGhosts(replicad, R, load), ...cordGhosts(R, x0 + Hg, load)];
+  return { parts, ghosts, info, place: (s) => placeInRig(s, L, R.zl, x0) };
+}
+
+/** Preview-only cord along the platform's cord line: gripper -> Tindeq -> springs. */
+function cordGhosts(R, xFrom, load) {
+  const seg = (a, b) => ({ name: "cord", kind: "cord", shape: replicad.makeCylinder(2.5, b - a, [a, R.Yc, R.Zc], [1, 0, 0]) });
+  const knot = R.xC1 + 4;
+  if (load === "springs") return [seg(xFrom, knot)];
+  const out = [seg(xFrom, R.xT0)];
+  if (load === "both") out.push(seg(R.xT0 + TINDEQ.length, knot));
+  return out;
 }
 
 function addonInfo(kind, R, parts) {

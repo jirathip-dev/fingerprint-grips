@@ -210,7 +210,7 @@ function showSummary(info, ms) {
     `<p><strong>${DEVICES[info.device].label}, ${info.side} hand</strong> · ${info.width.toFixed(0)} × ${info.depth.toFixed(0)} × ${info.height.toFixed(0)} mm · built in ${ms} ms</p>` +
     `<ul>${order.map((s) => slotLine(info, s)).join("")}</ul>` +
     `<p>All rollers are spools: raised rims, waist that centres the finger. Fingers go in from below, in front of the rollers.</p>` +
-    `<p>Cord goes in and out through two ${info.cord.diameter} mm holes in the top, ${info.cord.spread} mm apart and centred on your finger load so it hangs level. Hardware: 4 × 3 mm steel pins, ${info.hardware.rods} × M4 threaded rod ${info.hardware.rodLength} mm.</p>` +
+    `<p>Cord goes in and out through two ${info.cord.diameter} mm holes in the top, ${info.cord.spread} mm apart and dead centre. Hardware: 4 × 3 mm steel pins, ${info.hardware.rods} × M4 threaded rod ${info.hardware.rodLength} mm.</p>` +
     (info.addon ? addonSummary(info.addon) : "");
 }
 

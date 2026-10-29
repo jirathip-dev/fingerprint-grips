@@ -21,8 +21,7 @@
 // blind holes in the two walls beside it. Three M4 threaded rods clamp the stack.
 // The cord goes down into the top block near one end, along a tunnel, and back out near
 // the other end (holes about 2/3 of the width apart, as on the HoG Micro). The two holes
-// are centred on the finger load centre, so a sliding cord hangs the gripper level and
-// the wide stance stops it rolling.
+// sit dead centre, the same distance from both ends; the wide stance stops it rolling.
 
 export const FINGERS = ["pinky", "ring", "middle", "index"]; // x order for a right hand
 
@@ -51,10 +50,6 @@ export const DEFAULT_HAND = {
   ring: { length: 75, pipDip: 26, dipTip: 24, tipWidth: 17 },
   pinky: { length: 60, pipDip: 18.5, dipTip: 21, tipWidth: 15 },
 };
-
-// Rough share of the pull per finger. The cord sits over this load centre so the
-// gripper hangs level (Open Grips aligns its anchor the same way). PLACEHOLDER.
-export const FINGER_SHARE = { index: 0.27, middle: 0.33, ring: 0.26, pinky: 0.14 };
 
 export const DIM = {
   wall: 5, // divider wall
@@ -198,21 +193,22 @@ export function layout(device, hand) {
       : Math.min(...slots.map((s) => s.zc - s.r)) - DIM.fdp.stem;
   const maxCav = Math.max(...slots.map((s) => s.zCavTop));
   const zTop = maxCav + DIM.topBlock;
-  const anchorX = slots.reduce((sum, s) => sum + FINGER_SHARE[s.name] * (s.xs + s.w / 2), 0);
   const ycMax = Math.max(...slots.map((s) => s.yc));
   const rods = [
     { y: yF + 8, z: zTop - 26 },
     { y: -8, z: zTop - 26 },
     device === "fds" ? { y: ycMax / 2, z: zBottom + DIM.fds.rail / 2 } : { y: -DIM.fdp.spine / 2, z: zBottom + 5 },
   ];
-  // holes symmetric about the load centre; shrink the spread rather than go off-centre
-  const spread = 2 * Math.min(DIM.cordSpread * width / 2, anchorX - DIM.cordEdge, width - DIM.cordEdge - anchorX);
-  const cord = { x: anchorX, xa: anchorX - spread / 2, xb: anchorX + spread / 2, spread, y: yF / 2, bend: DIM.cordBend, half: DIM.cordHalf };
+  // holes dead centre, the same distance from both ends (simple and predictable; under load
+  // the index side, which pulls harder, dips a few degrees)
+  const cx = width / 2;
+  const spread = 2 * Math.min(DIM.cordSpread * width / 2, cx - DIM.cordEdge);
+  const cord = { x: cx, xa: cx - spread / 2, xb: cx + spread / 2, spread, y: yF / 2, bend: DIM.cordBend, half: DIM.cordHalf };
   cord.zh = zTop - 16; // centreline of the run along the top block
   cord.bottom = cord.zh - cord.half;
   for (const s of slots) s.pinLength = round1(s.w + 2 * DIM.pinDepth - 0.5);
 
-  return { device, slots, width, endX, yF, zBottom, zTop, maxCav, anchorX, rods, cord };
+  return { device, slots, width, endX, yF, zBottom, zTop, maxCav, rods, cord };
 }
 
 /**
