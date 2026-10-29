@@ -32,18 +32,28 @@ external loop to snap.
 
 ## Add-ons
 
-Pick one under **Add-on**. It's sized around the gripper you configured and goes in the same zip.
+Pick one under **Add-on**. It's sized around the gripper you configured and goes in the same zip (`print/addon/`).
 
-| | Table rig (Tindeq) | Spring trainer (portable) | Foot plate (Tindeq) |
-|---|---|---|---|
-| Like | the [Crimpdeq platform](https://platform.crimpdeq.com/introduction) | [Crimpy](https://www.instagram.com/crimpy.official/) | a strap anchor |
-| How | gripper lies on its back; palm pushes the rest, fingers pull; Tindeq hangs in line on its eyes between the cord and the anchor wall | same rig, but steel compression springs push back; swap or add springs for more load | stand on the plate, carabiner from the fin to the Tindeq, pull up |
-| Buy | 2 × M4 rod + nuts, 1 carabiner | 2 × M4 rod, 2–4 compression springs (any shop size, enter wire / OD / length / coils), 2–4 short M4 rods as spring guides | 1 carabiner |
-| Load shown | Tindeq app | kg marks on the rails every 5 kg, from the spring maths | Tindeq app |
+**Platform** (table or floor). One print, used every way, in the spirit of the [Crimpdeq platform](https://platform.crimpdeq.com/introduction) and [Crimpy](https://www.instagram.com/crimpy.official/). The gripper lies on its back between two rails and the cord runs straight down the middle: gripper → Tindeq bay → anchor wall → spring section.
 
-- The Tindeq Progressor 200 is about 100 × 58 × 25 mm with 17 mm eyes ~69 mm apart (measured from a photo, ±2 mm). The rig never clamps it, so the exact size doesn't matter; it only needs clearance.
-- Springs: rate `k = G d⁴ / (8 D³ nₐ)`. The travel stops before the wire would take a set (Wahl-corrected shear ≤ 40% of the wire's tensile strength) or the coils touch. Cheap springs vary about ±20%, so check once against a scale.
-- Each add-on is paper-screened at its rating × 2 (table and spring: 60 kg, foot plate: 100 kg) with **assumed** PETG limits (20 MPa along layers, 6 MPa across). That's a sanity check, not a load test.
+| Load | How | You read |
+|---|---|---|
+| Tindeq | Tindeq in the bay, far eye clipped round the bridge in the anchor wall | Tindeq app |
+| Springs | cord through the wall to the spring carriage, no Tindeq | 5 kg marks on the rails, from the spring maths |
+| Both | Tindeq in the bay, then on through the wall to the springs | Tindeq app: real force, and a check on the rail marks |
+
+| Push with | How |
+|---|---|
+| Palm | platform on a table, heel of the hand on the rounded rest |
+| Legs | platform on the floor, sitting, soles against the front of the rest, cord through the slot in it |
+
+Buy: 2 × M4 threaded rod + nuts; for springs, 2–4 compression springs (any shop size: enter wire / OD / length / coils) and 2–4 short M4 rods as spring guides; a carabiner for the Tindeq.
+
+**Foot plate** (one foot). A lug each side of your foot (120 mm between them); a cord from each lug meets the other at the Tindeq's lower eye at least 250 mm up, so the pull stays centred under one foot. Hang the gripper from the Tindeq's top eye and pull up.
+
+- The Tindeq Progressor 200 is about 100 × 55 × 25 mm (19 mm at the ends), eyes ~69 mm apart: measured from photos, ±2 mm. The platform never clamps it, so the exact size doesn't matter; it only needs clearance, including over the extra distance it moves when springs are fitted.
+- Springs: rate `k = G d⁴ / (8 D³ nₐ)`. The travel stops before the wire would take a set (Wahl-corrected shear ≤ 40% of the wire's tensile strength) or the coils touch. Cheap springs vary about ±20%: check once with the Tindeq (load "both").
+- Each add-on is paper-screened at its rating × 2 (platform: 60 kg or the full spring load, whichever is higher; foot plate: 100 kg) with **assumed** PETG limits (20 MPa along layers, 6 MPa across). That's a sanity check, not a load test.
 - Not affiliated with Crimpdeq or Crimpy; their designs aren't copied, only the idea of a palm-push rig and a spring trainer.
 
 > Status: prototype. Fit rules come from the Open Grips project and have not
@@ -90,15 +100,15 @@ Builds FDP and FDS, right and left, and fails on any of:
 - bad measurements that are accepted
 - a right-hand gripper that has the pinky on the left (seen from the hand side), or the reverse
 
-and for each add-on (FDP + FDS):
+and for each add-on (FDP + FDS, platform with 2 and 4 springs):
 
 - a printed piece that is not watertight or doesn't fit the bed
-- the gripper clashing with the rig, or not resting on the ledges, at either end of its travel
-- a palm rest more than 6 mm off the middle finger's way in, or with no bar in the middle
-- anything printed in the straight cord line from the gripper to the anchor
-- table rig: a printed part within 2 mm of the Tindeq, side guides missing, the carabiner window closed or with no bridge above it
-- spring trainer: springs touching the frame; the carriage hitting the frame early, or nothing stopping it at full travel; a spring rate that disagrees with the hand calculation; kg marks in the wrong place
-- foot plate: carabiner hole blocked, no bridge above it
+- the gripper clashing with the platform, or not resting on the ledges, at either end of its travel; no room under an FDS gripper for the fingertips
+- a palm rest more than 6 mm off the middle finger's way in, or not full width
+- anything printed in the straight cord line from the front of the rest (leg-push slot) to behind the spring carriage; a slot too wide for the rest
+- a printed part within 2 mm of the Tindeq anywhere along its run (it moves when springs are fitted), the Tindeq reaching the gripper's knot, side guides missing, the wall window closed or with no bridge above it
+- springs touching the frame; the carriage hitting the frame early, or nothing stopping it at full travel; a spring rate that disagrees with the hand calculation; the wire overloaded at full squeeze; kg marks in the wrong place
+- foot plate: less than 110 mm for the foot, anything sticking up where the foot goes, either lug hole blocked or without a bridge, a cord rubbing the plate or pressing on the top of the foot
 - any piece over its assumed limit in the strength screen; bad spring sizes that are accepted
 
 ## Layout
@@ -108,7 +118,7 @@ index.html          page + form
 src/main.js         UI, three.js viewer, zip download
 src/worker.js       CAD kernel in a Web Worker (page never freezes)
 src/model.js        geometry + fit maths + validation (pure, also runs in Node)
-src/accessories.js  add-ons: table rig, spring trainer, foot plate, spring maths, strength screen
+src/accessories.js  add-ons: platform (Tindeq / springs / both), foot plate, spring maths, strength screen
 scripts/check.mjs   geometry gate
 ```
 

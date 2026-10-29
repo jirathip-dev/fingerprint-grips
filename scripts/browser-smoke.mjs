@@ -83,15 +83,22 @@ console.log(`5 download         ${t5} ms -> ${zipInfo.name}, ${(zipInfo.bytes / 
 console.log(`                   ${zipInfo.files.join(", ")}`);
 console.log(`  status           "${await status()}"`);
 
-// 6: spring trainer add-on: live kg readout, then the zip gains print/addon/
-await radio("addon", "spring");
-await waitFor(`document.querySelector('#summary').innerText.includes('Spring trainer') && document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
+// 6: platform add-on: Tindeq -> springs (live kg readout) -> both, leg push; zip gains print/addon/
+await radio("addon", "platform");
+await waitFor(`document.querySelector('#summary').innerText.includes('Tindeq, palm push') && document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
+const springBoxHidden = await ev(`document.querySelector('#spring-box').hidden`);
+await radio("load", "springs");
+await waitFor(`!document.querySelector('#spring-box').hidden && document.querySelector('#summary').innerText.includes('springs, palm push')`, 90000);
+console.log(`6 platform         Tindeq: spring inputs hidden=${springBoxHidden}; springs: shown`);
 const kgBefore = await ev(`document.querySelector('#spring-out').innerText`);
 await radio("springCount", "4");
 await waitFor(`document.querySelector('#spring-out').innerText !== ${JSON.stringify(kgBefore)}`);
-console.log(`6 spring add-on    2 springs: "${kgBefore.split(".")[0]}"`);
+console.log(`                   2 springs: "${kgBefore.split(".")[0]}"`);
 console.log(`                   4 springs: "${(await ev(`document.querySelector('#spring-out').innerText`)).split(".")[0]}"`);
-await waitFor(`document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
+await radio("load", "both");
+await radio("brace", "legs");
+await waitFor(`document.querySelector('#summary').innerText.includes('Tindeq + springs, leg push') && document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
+console.log(`  both + legs      ${(await ev(`[...document.querySelectorAll('#summary p')].find(p => p.innerText.startsWith('Platform'))?.innerText`))}`);
 await ev(`window.__zip = null`);
 await ev(`document.querySelector('#download').click()`);
 await waitFor(`window.__zip !== null`, 120000);
@@ -102,8 +109,11 @@ const addonZip = await ev(`(async () => { const b = new Uint8Array(await window.
   return { name: window.__zipName, files: names }; })()`);
 const addonFiles = addonZip.files.filter((f) => f.startsWith("print/addon/"));
 console.log(`  add-on zip       ${addonZip.name}: ${addonZip.files.length} files, add-on: ${addonFiles.join(", ")}`);
-if (!addonFiles.length || !addonZip.name.endsWith("-spring.zip")) throw new Error("add-on parts missing from the zip");
-await shot("shot-4-spring.png");
+if (!addonFiles.length || !addonZip.name.endsWith("-platform.zip")) throw new Error("add-on parts missing from the zip");
+await shot("shot-4-platform.png");
+await radio("addon", "foot");
+await waitFor(`document.querySelector('#summary').innerText.includes('Foot plate') && document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
+console.log(`  foot plate       ${(await ev(`[...document.querySelectorAll('#summary li')].find(l => l.innerText.startsWith('One foot'))?.innerText`))}`);
 
 console.log(`7 console          ${logs.length ? logs.join(" | ") : "no errors or warnings"}`);
 await fetch(`${CDP}/json/close/${tab.id}`);

@@ -3,7 +3,7 @@ import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
 import * as replicad from "replicad";
 import { buildGripper, printOrient, validate } from "./model.js";
-import { rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, placeOverFoot, printOrientAddon, validateSpring, massG } from "./accessories.js";
+import { rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, placeOverFoot, printOrientAddon, validateSpring, massG, SPRING_DEFAULT, ADDON_DIM } from "./accessories.js";
 
 const ready = (async () => {
   const OC = await opencascade({ locateFile: () => wasmUrl });
@@ -25,25 +25,26 @@ const toMesh = (p) => {
 };
 
 /** Build the add-on (if any). Returns { parts (printed), ghosts, info, place(shape) }. */
-function buildAddon(addon, gripper, spring) {
+function buildAddon(addon, gripper, spring, load, brace) {
   if (addon === "foot") {
     const P = footLayout();
     const parts = buildFoot(replicad, P);
     const g = footGhosts(replicad, P);
     return { parts, ghosts: g.ghosts, info: addonInfo("foot", P, parts), place: (s) => placeOverFoot(s, gripper.layout, gripper.info.cord.x, g.gripperTop, P) };
   }
-  const R = rigLayout(addon, gripper.layout, gripper.info, spring);
+  const R = rigLayout(gripper.layout, gripper.info, spring);
   if (R.problems?.length) throw Object.assign(new Error(R.problems[0]), { problems: R.problems });
   const parts = buildRig(replicad, R);
-  return { parts, ghosts: rigGhosts(replicad, R), info: addonInfo(addon, R, parts), place: (s) => placeInRig(s, gripper.layout, R.zl, R.gripperX0) };
+  const info = { ...addonInfo("platform", R, parts), load, brace, notch: ADDON_DIM.palm.notch };
+  return { parts, ghosts: rigGhosts(replicad, R, load), info, place: (s) => placeInRig(s, gripper.layout, R.zl, R.gripperX0) };
 }
 
 function addonInfo(kind, R, parts) {
   const grams = parts.reduce((g, p) => g + massG(replicad.measureVolume(p.shape)), 0);
   const base = { kind, grams, pieces: parts.map((p) => p.name), screen: R.screen };
-  if (kind === "foot") return { ...base, size: [R.len, R.width] };
+  if (kind === "foot") return { ...base, size: [R.len, R.width], gap: R.gap, apex: R.apex };
   const info = { ...base, length: Math.round(R.xEnd), width: Math.round(2 * R.outer), rodLength: R.rodLength, travel: 50, palmHeight: R.Zp };
-  if (kind === "spring") {
+  {
     const s = R.spring;
     info.spring = { count: s.count, k: +s.k.toFixed(2), travel: +s.travel.toFixed(1), totalKg: +s.totalKg.toFixed(1), kgPerMm: +s.kgPerMm.toFixed(2), limitedBy: s.limitedBy, od: s.OD, wire: s.d, length: s.L0, marks: R.marks.map((m) => m.kg), guideLength: Math.ceil(R.xEnd - R.xW0 + 10) };
   }
@@ -51,10 +52,11 @@ function addonInfo(kind, R, parts) {
 }
 
 self.onmessage = async ({ data }) => {
-  const { id, type, hand, side, device, addon = "none", spring } = data;
+  const { id, type, hand, side, device, addon = "none", spring, load = "tindeq", brace = "palm" } = data;
+  const usesSprings = addon === "platform" && load !== "tindeq";
   try {
     await ready;
-    const problems = [...validate(hand), ...(addon === "spring" ? validateSpring(spring) : [])];
+    const problems = [...validate(hand), ...(usesSprings ? validateSpring(spring) : [])];
     if (problems.length) {
       self.postMessage({ id, ok: false, problems });
       return;
@@ -62,7 +64,8 @@ self.onmessage = async ({ data }) => {
     const t0 = performance.now();
     const gripper = buildGripper(replicad, hand, { device, side });
     const { parts, info } = gripper;
-    const extra = addon === "none" ? null : buildAddon(addon, gripper, spring);
+    // the spring section is always printed; without springs it is sized for the default spring
+    const extra = addon === "none" ? null : buildAddon(addon, gripper, usesSprings ? spring : SPRING_DEFAULT, load, brace);
     if (extra) info.addon = extra.info;
 
     if (type === "preview") {

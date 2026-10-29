@@ -44,11 +44,18 @@ for (const [k, f] of Object.entries(SPRING_FIELDS))
 
 const ADDONS = {
   none: "",
-  table:
-    "A table rig like the Crimpdeq platform. The gripper lies on its back; your palm presses on the rest, your fingers pull, and the Tindeq sits in line between the cord and the anchor wall. No foot strap. Sits flat on a table.",
-  spring:
-    "A portable trainer in the style of Crimpy: steel compression springs push back instead of a Tindeq. Swap or add springs to change the load; the marks on the rails show roughly how many kg you're pulling.",
-  foot: "A plate to stand on. Clip the Tindeq's lower eye to the fin with a carabiner, hang the gripper from the top eye and pull up.",
+  platform:
+    "One platform in the spirit of the Crimpdeq platform and Crimpy. The gripper lies on its back between two rails; the cord runs straight down the middle to a Tindeq, to springs, or to both. The same printed parts do all three.",
+  foot: "A plate for one foot. A cord from each side of your foot meets above it at the Tindeq, so the pull stays centred under that foot. Hang the gripper from the Tindeq's top eye and pull up.",
+};
+const LOAD_TXT = {
+  tindeq: "Tindeq in the bay, its far eye clipped round the bridge in the anchor wall. You read the force in the Tindeq app.",
+  springs: "No Tindeq: the cord goes through the wall to the spring carriage. Marks on the rails show roughly how many kg you're pulling.",
+  both: "Tindeq in the bay, cord on through the wall to the springs. The springs give the resistance and the Tindeq shows the real force live, so you can also check the rail marks.",
+};
+const BRACE_TXT = {
+  palm: "Platform on a table: heel of your hand on the rounded rest, fingers hooked in the gripper.",
+  legs: "Platform on the floor, sitting: soles of your feet against the front of the rest, cord through the slot in it to the gripper in your hands. Nothing to change on the parts.",
 };
 
 function readForm() {
@@ -56,15 +63,19 @@ function readForm() {
   for (const name of FINGERS) hand[name] = Object.fromEntries(KEYS.map((k) => [k, Number(form.elements[`${name}.${k}`].value)]));
   const spring = Object.fromEntries(Object.keys(SPRING_FIELDS).map((k) => [k, Number(form.elements[`spring.${k}`].value)]));
   spring.count = Number(form.elements.springCount.value);
-  return { hand, side: form.elements.side.value, device: form.elements.device.value, addon: form.elements.addon.value, spring };
+  return { hand, side: form.elements.side.value, device: form.elements.device.value, addon: form.elements.addon.value, load: form.elements.load.value, brace: form.elements.brace.value, spring };
 }
 const kg = (v) => (v >= 10 ? Math.round(v) : v.toFixed(1));
 function showBlurb() {
   blurbEl.textContent = DEVICES[form.elements.device.value].blurb;
   const addon = form.elements.addon.value;
   document.querySelector("#addon-blurb").textContent = ADDONS[addon];
-  document.querySelector("#spring-box").hidden = addon !== "spring";
-  if (addon === "spring") {
+  const load = form.elements.load.value;
+  const springs = addon === "platform" && load !== "tindeq";
+  document.querySelector("#platform-box").hidden = addon !== "platform";
+  document.querySelector("#load-blurb").textContent = `${LOAD_TXT[load]} ${BRACE_TXT[form.elements.brace.value]}`;
+  document.querySelector("#spring-box").hidden = !springs;
+  if (springs) {
     const sp = readForm().spring;
     const out = document.querySelector("#spring-out");
     const bad = validateSpring(sp);
@@ -103,6 +114,7 @@ const KIND_MAT = {
   ghost: () => new THREE.MeshStandardMaterial({ color: 0xf5c400, roughness: 0.5, transparent: true, opacity: 0.75 }),
   spring: () => new THREE.MeshStandardMaterial({ color: 0xe3e7ee, roughness: 0.35, metalness: 0.35 }),
   steel: () => new THREE.MeshStandardMaterial({ color: 0x8b9099, roughness: 0.4, metalness: 0.7 }),
+  cord: () => new THREE.MeshStandardMaterial({ color: 0x9acd32, roughness: 0.8 }),
 };
 const frameMat = new THREE.MeshStandardMaterial({ color: 0xa7adb8, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.45, depthWrite: false });
 let modelGroup = null;
@@ -202,17 +214,25 @@ function showSummary(info, ms) {
     (info.addon ? addonSummary(info.addon) : "");
 }
 
-const ADDON_NAME = { table: "Table rig", spring: "Spring trainer", foot: "Foot plate" };
+const ADDON_NAME = { platform: "Platform", foot: "Foot plate" };
+const LOAD_NAME = { tindeq: "Tindeq", springs: "springs", both: "Tindeq + springs" };
 function addonSummary(a) {
   const size = a.kind === "foot" ? `${a.size[0]} × ${a.size[1]} mm` : `${a.length} × ${a.width} mm`;
   const weak = a.screen.items.filter((i) => !i.ok);
-  let html = `<p><strong>${ADDON_NAME[a.kind]}</strong> · ${size} · ${a.pieces.length} printed part${a.pieces.length > 1 ? "s" : ""} · about ${a.grams} g of filament</p><ul>`;
-  if (a.kind === "table") html += `<li>Fits a Tindeq Progressor (about ${TINDEQ.length} × ${TINDEQ.width} mm). It hangs in line on its eyes and never carries load through its case.</li><li>Palm rest top ${a.palmHeight} mm high, lined up with your finger channel. Set the gap by cord length (0–${a.travel} mm).</li>`;
-  if (a.kind === "spring") {
-    const s = a.spring;
-    html += `<li>${s.count} × compression spring ${s.wire} × ${s.od} × ${s.length} mm: about <b>${kg(s.totalKg)} kg</b> at full squeeze over ${s.travel} mm.</li><li>Rail marks every 5 kg (${s.marks.join(", ")}). Stops end the travel before the springs can be overloaded.</li>`;
+  const how = a.kind === "platform" ? ` · ${LOAD_NAME[a.load]}, ${a.brace === "legs" ? "leg" : "palm"} push` : "";
+  let html = `<p><strong>${ADDON_NAME[a.kind]}</strong>${how} · ${size} · ${a.pieces.length} printed part${a.pieces.length > 1 ? "s" : ""} · about ${a.grams} g of filament</p><ul>`;
+  if (a.kind === "platform") {
+    if (a.load !== "springs") html += `<li>Fits a Tindeq Progressor (about ${TINDEQ.length} × ${TINDEQ.width} × ${TINDEQ.thick} mm). It hangs in line on its eyes and never carries load through its case.</li>`;
+    if (a.load !== "tindeq") {
+      const s = a.spring;
+      html += `<li>${s.count} × compression spring ${s.wire} × ${s.od} × ${s.length} mm: about <b>${kg(s.totalKg)} kg</b> at full squeeze over ${s.travel} mm. Rail marks every 5 kg (${s.marks.join(", ")}); stops end the travel before the springs are overloaded.</li>`;
+    }
+    html += a.brace === "legs"
+      ? `<li>Leg push: feet flat on the front of the rest, cord through its ${a.notch} mm slot. Platform flat on the floor.</li>`
+      : `<li>Palm rest top ${a.palmHeight} mm high, lined up with your finger channel. Set the gap by cord length (0–${a.travel} mm).</li>`;
+    html += `<li>Print once, use every way: Tindeq, springs or both, palm or legs.</li>`;
   }
-  if (a.kind === "foot") html += `<li>Carabiner hole 14 mm in the fin. Stand with both feet either side of the fin.</li>`;
+  if (a.kind === "foot") html += `<li>One foot, ${a.gap} mm between the lugs (up to about EU 46 / US 12). A cord from each side meets at the Tindeq's lower eye, at least ${a.apex} mm above the plate.</li>`;
   html += `<li>Strength screen at ${a.screen.kg} kg × ${2} safety factor: ${weak.length ? `<span class="screen-bad">over the limit: ${weak.map((w) => w.part).join(", ")}</span>` : "every part under its assumed limit"}. A paper check with guessed PETG limits, not a load test.</li></ul>`;
   return html;
 }
@@ -284,57 +304,60 @@ ${files}
   if (a.kind === "foot")
     return `
 ==============================================================================
-FOOT PLATE
-${common}
-Use
-  Stand on the plate, one foot each side of the fin. Carabiner through the fin hole to the
-  Tindeq's lower eye; gripper cord to the upper eye. Pull straight up.
-  Paper-screened for ${a.screen.kg} kg with a 2x factor. Not load-tested.
-`;
-  const rods = `  2 x M4 threaded rod, ${a.rodLength} mm, with nuts + washers (clamps the rig parts together along the rails)`;
-  if (a.kind === "table")
-    return `
-==============================================================================
-TABLE RIG (TINDEQ)
+FOOT PLATE (ONE FOOT)
 ${common}
 Hardware
-${rods}
-  1 carabiner (anchor wall to the Tindeq's far eye)
+  2 cords (5-6 mm, about 40 cm each), 1 carabiner
 
-Assembly
-  1. Butt the rig parts together, push the two rods through the rails, tighten the nuts.
-  2. Lay the gripper on its back on the two ledges, finger side toward the palm rest.
-  3. Cord from the gripper to the Tindeq's near eye. Carabiner from the far eye through
-     the window in the anchor wall, clipped round the bar above it.
-  4. Adjust the cord length so your heel sits on the rest with your fingers hooked in.
-     The Tindeq should hang clear of the floor and the side guides when you pull.
-  Paper-screened for ${a.screen.kg} kg with a 2x factor. Never load it past that. Tare the Tindeq unloaded.
+Use
+  1. Tie a cord to each lug. Stand on the plate with one foot between the lugs
+     (${a.gap} mm of room), lugs beside your arch.
+  2. Bring both cords up to one carabiner, at least ${a.apex} mm above the plate (shorter
+     cords pull the lugs sideways). Clip it to the Tindeq's lower eye.
+  3. Gripper cord to the Tindeq's top eye. Pull straight up. Swap feet between sets.
+  Paper-screened for ${a.screen.kg} kg with a 2x factor. Not load-tested.
 `;
   const s = a.spring;
   return `
 ==============================================================================
-SPRING TRAINER
+PLATFORM (TINDEQ / SPRINGS / BOTH, PALM OR LEG PUSH)
 ${common}
 Hardware
-${rods}
-  ${s.count} x compression spring, wire ${s.wire} mm, OD ${s.od} mm, free length ${s.length} mm
-  ${s.count} x M4 threaded rod, ${s.guideLength} mm, 4 nuts each (spring guides)
-  About 40 cm of 5-6 mm cord
+  2 x M4 threaded rod, ${a.rodLength} mm, with nuts + washers (clamps the parts together along the rails)
+  Tindeq use: 1 carabiner (or a short loop of cord) from the Tindeq's far eye round the wall bridge
+  Spring use: ${s.count} x compression spring, wire ${s.wire} mm, OD ${s.od} mm, free length ${s.length} mm
+              ${s.count} x M4 threaded rod, ${s.guideLength} mm, 4 nuts each (spring guides)
+              About 60 cm of 5-6 mm cord
 
 Assembly
-  1. Butt the rig parts together, push the two long rods through the rails, tighten.
-  2. Fix one guide rod in each spring hole of the wall with a nut each side.
-  3. Slide a spring onto each guide rod, then the carriage, then a stop nut behind it so the
-     carriage rests against the end posts.
-  4. Cord: gripper -> through the hole in the wall -> through the carriage, knot behind it.
-  5. Lay the gripper on its back on the ledges, finger side toward the palm rest.
+  1. Butt the parts together, push the two long rods through the rails, tighten the nuts.
+  2. Lay the gripper on its back on the two ledges, finger side toward the rest.
+  3. Springs (if used): fix a guide rod in each spring hole of the wall with a nut each side,
+     slide on the springs, then the carriage, then a stop nut behind it so the carriage rests
+     against the end posts.
 
-Load
-  About ${kg(s.totalKg)} kg at full squeeze over ${s.travel} mm (${s.kgPerMm} kg per mm).
+Load: pick one, no reprint
+  Tindeq only     cord from the gripper to the Tindeq's near eye; carabiner from its far eye
+                  through the wall window, round the bridge above it.
+  Springs only    cord from the gripper through the wall window and the carriage, knot behind it.
+  Tindeq+springs  gripper -> Tindeq near eye; far eye -> short cord through the window and the
+                  carriage, knot behind it. The springs give the resistance, the Tindeq reads it.
+  The Tindeq should hang clear of the floor and the side guides when you pull. Tare it unloaded.
+
+Brace: pick one
+  Palm push   platform on a table. Heel of your hand on the rounded rest, fingers in the gripper.
+  Leg push    platform flat on the floor, sitting. Soles of your feet on the front of the rest,
+              cord out through the slot in the rest to the gripper in your hands. Keep the pull
+              level with the platform; don't lift the far end.
+
+Springs
+  About ${kg(s.totalKg)} kg at full squeeze over ${s.travel} mm (${s.kgPerMm} kg per mm), for the springs above.
   The carriage hits the stop posts at full squeeze, before the springs are overloaded.
   The marks on the rails show where the carriage's front face sits at ${s.marks.join(", ")} kg.
-  This is calculated from the spring sizes; cheap springs vary about 20%. Check once with a
-  luggage scale or a Tindeq and note the real value.
+  Calculated from the spring sizes; cheap springs vary about 20%. Check once with the Tindeq
+  (Tindeq + springs) and trust its number.
+
+  Paper-screened for ${a.screen.kg} kg with a 2x factor. Never load it past that.
 `;
 }
 

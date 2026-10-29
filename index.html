@@ -31,11 +31,24 @@
           <fieldset class="choice addon">
             <legend>Add-on</legend>
             <label><input type="radio" name="addon" value="none" checked /> None</label>
-            <label><input type="radio" name="addon" value="table" /> <b>Table rig</b> <span>Tindeq</span></label>
-            <label><input type="radio" name="addon" value="spring" /> <b>Spring trainer</b> <span>portable</span></label>
-            <label><input type="radio" name="addon" value="foot" /> <b>Foot plate</b> <span>Tindeq</span></label>
+            <label><input type="radio" name="addon" value="platform" /> <b>Platform</b> <span>table or floor</span></label>
+            <label><input type="radio" name="addon" value="foot" /> <b>Foot plate</b> <span>one foot</span></label>
           </fieldset>
           <p id="addon-blurb" class="blurb"></p>
+          <div id="platform-box" hidden>
+            <fieldset class="choice load">
+              <legend>Load</legend>
+              <label><input type="radio" name="load" value="tindeq" checked /> <b>Tindeq</b></label>
+              <label><input type="radio" name="load" value="springs" /> <b>Springs</b></label>
+              <label><input type="radio" name="load" value="both" /> <b>Both</b> <span>Tindeq reads the springs</span></label>
+            </fieldset>
+            <fieldset class="choice brace">
+              <legend>Push with</legend>
+              <label><input type="radio" name="brace" value="palm" checked /> <b>Palm</b> <span>on a table</span></label>
+              <label><input type="radio" name="brace" value="legs" /> <b>Legs</b> <span>on the floor</span></label>
+            </fieldset>
+            <p id="load-blurb" class="blurb"></p>
+          </div>
           <div id="spring-box" class="spring-box" hidden>
             <p class="spring-head">Your springs <span>(compression springs, from the shop listing)</span></p>
             <div class="spring-grid" id="spring-grid"></div>
