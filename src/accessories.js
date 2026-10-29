@@ -156,12 +156,14 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   R.xW1 = R.xW0 + A.wall.t;
   R.window = { y: Yc, z: Zc, r: A.wall.window / 2 };
 
-  // spring section: 2 springs either side of the window, or a 2 x 2 block (load stays centred)
+  // spring section: always a 2 x 2 block of seats round the window, so the same print takes
+  // 2 or 4 springs. 2 springs go on a diagonal: the load still pulls through the centre.
   const off = R.window.r + 3 + m.OD / 2;
   const dz = m.OD / 2 + 2;
   const ys = [Yc - off, Yc + off];
-  const pos = m.count === 2 ? ys.map((y) => ({ y, z: Zc })) : ys.flatMap((y) => [{ y, z: Zc - dz }, { y, z: Zc + dz }]);
-  R.spring = { ...m, ys, pos, rest: m.L0 - S.preload };
+  const pos = ys.flatMap((y) => [{ y, z: Zc - dz }, { y, z: Zc + dz }]);
+  const used = m.count === 4 ? pos : [pos[0], pos[3]];
+  R.spring = { ...m, ys, pos, used, rest: m.L0 - S.preload };
   R.xC0 = R.xW1 + R.spring.rest;
   R.xC1 = R.xC0 + S.carriage;
   R.xEnd = R.xC1 + S.post + 3;
@@ -171,17 +173,22 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   R.carriageZ = [Math.min(...zs) - m.OD / 2 - 6, Math.max(...zs) + m.OD / 2 + 6];
   if (R.carriageY[0] < -inner + 0.5 || R.carriageY[1] > inner - 0.5)
     R.problems.push(`Those springs are too fat for this platform (${m.OD} mm OD). Use a smaller outer diameter.`);
-  if (R.carriageZ[0] < 7) R.problems.push(`${m.count} springs of ${m.OD} mm OD don't fit under the cord line. Use 2 springs or a smaller OD.`);
+  if (R.carriageZ[0] < 7) R.problems.push(`Springs of ${m.OD} mm OD don't fit under the cord line (the platform always has room for 4). Use a smaller OD.`);
   R.postY = [[R.carriageY[0], R.carriageY[0] + S.post], [R.carriageY[1] - S.post, R.carriageY[1]]];
   R.stopLen = R.spring.rest - m.travel; // wall to the carriage at full squeeze
   R.wallTop = Math.max(Zc + R.window.r * Math.SQRT2 + A.wall.over, R.carriageZ[1] + 4);
-  // 5 kg marks on the rail tops: where the carriage's front face sits at each load (sight across)
+  // 5 kg marks on the rail tops: where the carriage's front face sits at each load (sight across).
+  // One rail is marked for 2 springs, the other for 4. Marks go by position, so they stay right
+  // when the springs are pre-tensioned with the nuts.
   R.marks = [];
-  for (let kg = 5; ; kg += 5) {
-    const dx = (kg * 9.81) / (m.count * m.k) - S.preload;
-    if (dx > m.travel) break;
-    if (dx > 0.5) R.marks.push({ kg, x: R.xC0 - dx });
-  }
+  for (const [n, rail] of [[2, 1], [4, -1]])
+    for (let kg = 5; ; kg += 5) {
+      const dx = (kg * 9.81) / (n * m.k) - S.preload;
+      if (dx > m.travel) break;
+      if (dx > 0.5) R.marks.push({ kg, x: R.xC0 - dx, n, rail });
+    }
+  R.spring.kg2 = springMath({ ...spring, count: 2 }).totalKg;
+  R.spring.kg4 = springMath({ ...spring, count: 4 }).totalKg;
   R.cuttable = [[R.xPalm + 5, R.xBayEnd - 5], [R.tindeqRun[0] + 8, R.tindeqRun[1] - 8], [R.xW1 + R.stopLen + 2, R.xC0 - 2]];
   R.pieces = splitPieces(R.xEnd, R.cuttable, A.maxPiece);
   R.rodLength = Math.ceil(R.xEnd + 16);
@@ -223,7 +230,7 @@ function splitPieces(xEnd, cuttable, maxLen) {
  *  path as palm push, but lower down, so the palm case covers it. */
 function screenRig(R) {
   const A = ADDON_DIM;
-  const kg = Math.max(RATING.platform, R.spring.totalKg);
+  const kg = Math.max(RATING.platform, R.spring.kg4); // 4 springs can always be fitted
   const F = kg * 9.81 * DESIGN_FACTOR;
   const zLoad = Math.max(R.Zc, R.Zp);
   const out = [];
@@ -311,7 +318,7 @@ export function buildRig(r, R) {
   }
   for (const m of R.marks) {
     const w = m.kg % 10 === 0 ? 2.4 : 1.2;
-    for (const k of [-1, 1]) tools.push(box(r, m.x - w / 2, m.x + w / 2, k > 0 ? inner : -outer, k > 0 ? outer : -inner, A.rail.h - 1.2, A.rail.h + 1));
+    tools.push(box(r, m.x - w / 2, m.x + w / 2, m.rail > 0 ? inner : -outer, m.rail > 0 ? outer : -inner, A.rail.h - 1.2, A.rail.h + 1));
   }
   for (const rod of R.rods) tools.push(prismX(teardrop(r, rod.y, rod.z, A.rod.r), -1, R.xEnd + 1));
   for (const t of tools) body = body.cut(t);
@@ -365,7 +372,7 @@ export function rigGhosts(r, R, load = "both") {
   }
   if (load !== "tindeq") {
     const sp = R.spring;
-    for (const { y, z } of sp.pos) {
+    for (const { y, z } of sp.used) {
       const tube = r.makeCylinder(sp.OD / 2, sp.rest, [R.xW1, y, z], [1, 0, 0]).cut(r.makeCylinder(sp.ID / 2, sp.rest + 2, [R.xW1 - 1, y, z], [1, 0, 0]));
       out.push({ name: "spring", kind: "spring", shape: tube });
       out.push({ name: "guide_rod", kind: "steel", shape: r.makeCylinder(2, R.xEnd - R.xW0 + 4, [R.xW0 - 4, y, z], [1, 0, 0]) });

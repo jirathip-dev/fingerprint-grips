@@ -30,6 +30,23 @@ other hole. The holes sit about 65% of the width apart (a wide, stable stance)
 and sit dead centre, the same distance from both ends. No
 external loop to snap.
 
+## Parts to buy
+
+The app lists exactly what your build needs (sizes and lengths), with example shop searches for [Lazada TH](https://www.lazada.co.th) and [AliExpress](https://www.aliexpress.com). The same list goes in the zip's README. They're searches, not product links: check the size on the listing.
+
+| Part | Example search (Lazada TH) | Notes |
+|---|---|---|
+| 3 mm steel rod (roller pins) | [เพลาสแตนเลส 3 มม](https://www.lazada.co.th/catalog/?q=%E0%B9%80%E0%B8%9E%E0%B8%A5%E0%B8%B2%E0%B8%AA%E0%B9%81%E0%B8%95%E0%B8%99%E0%B9%80%E0%B8%A5%E0%B8%AA%203%20%E0%B8%A1%E0%B8%A1) | cut to the lengths in the app |
+| M4 threaded rod | [สตัด เกลียวตลอด M4](https://www.lazada.co.th/catalog/?q=%E0%B8%AA%E0%B8%95%E0%B8%B1%E0%B8%94%20%E0%B9%80%E0%B8%81%E0%B8%A5%E0%B8%B5%E0%B8%A2%E0%B8%A7%E0%B8%95%E0%B8%A5%E0%B8%AD%E0%B8%94%20M4) | 1 m, cut with a hacksaw |
+| M4 nuts + washers | [น็อตตัวเมีย M4 สแตนเลส](https://www.lazada.co.th/catalog/?q=%E0%B8%99%E0%B9%87%E0%B8%AD%E0%B8%95%E0%B8%95%E0%B8%B1%E0%B8%A7%E0%B9%80%E0%B8%A1%E0%B8%B5%E0%B8%A2%20M4%20%E0%B8%AA%E0%B9%81%E0%B8%95%E0%B8%99%E0%B9%80%E0%B8%A5%E0%B8%AA) | |
+| 5–6 mm cord | [เชือก prusik 6 มม](https://www.lazada.co.th/catalog/?q=%E0%B9%80%E0%B8%8A%E0%B8%B7%E0%B8%AD%E0%B8%81%20prusik%206%20%E0%B8%A1%E0%B8%A1) | climbing accessory cord is best |
+| Compression springs | [สปริงกด ลวด 2 มิล วงนอก 16](https://www.lazada.co.th/catalog/?q=%E0%B8%AA%E0%B8%9B%E0%B8%A3%E0%B8%B4%E0%B8%87%E0%B8%81%E0%B8%94%20%E0%B8%A5%E0%B8%A7%E0%B8%94%202%20%E0%B8%A1%E0%B8%B4%E0%B8%A5%20%E0%B8%A7%E0%B8%87%E0%B8%99%E0%B8%AD%E0%B8%81%2016) | platform only; the app makes the search from your spring size |
+| Climbing carabiner | [คาราบิเนอร์ ปีนเขา kN](https://www.lazada.co.th/catalog/?q=%E0%B8%84%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%9A%E0%B8%B4%E0%B9%80%E0%B8%99%E0%B8%AD%E0%B8%A3%E0%B9%8C%20%E0%B8%9B%E0%B8%B5%E0%B8%99%E0%B9%80%E0%B8%82%E0%B8%B2%20kN) | Tindeq use; look for a kN rating |
+
+Not endorsements, no affiliate links. Any hardware or climbing shop works too.
+
+**Spring load:** the platform always has seats for 4 springs. Fit 2 (opposite corners) or 4 without reprinting; one rail is marked for 2 springs, the other for 4. For a harder start, wind the nuts behind the carriage in to pre-tension the springs. The top load stays the same (the stops set it) and the marks still read right.
+
 ## Add-ons
 
 Pick one under **Add-on**. It's sized around the gripper you configured and goes in the same zip (`print/addon/`).

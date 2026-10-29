@@ -4,6 +4,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { zipSync, strToU8 } from "fflate";
 import { FINGERS, DEFAULT_HAND, MEASURES, DEVICES } from "./model.js";
 import { SPRING_FIELDS, SPRING_DEFAULT, springMath, validateSpring, TINDEQ } from "./accessories.js";
+import { partsFor, partsHtml, partsText } from "./parts.js";
 
 // ---------- form ----------
 const form = document.querySelector("#hand-form");
@@ -211,7 +212,8 @@ function showSummary(info, ms) {
     `<ul>${order.map((s) => slotLine(info, s)).join("")}</ul>` +
     `<p>All rollers are spools: raised rims, waist that centres the finger. Fingers go in from below, in front of the rollers.</p>` +
     `<p>Cord goes in and out through two ${info.cord.diameter} mm holes in the top, ${info.cord.spread} mm apart and dead centre. Hardware: 4 × 3 mm steel pins, ${info.hardware.rods} × M4 threaded rod ${info.hardware.rodLength} mm.</p>` +
-    (info.addon ? addonSummary(info.addon) : "");
+    (info.addon ? addonSummary(info.addon) : "") +
+    partsHtml(partsFor(info));
 }
 
 const ADDON_NAME = { platform: "Platform", foot: "Foot plate" };
@@ -225,7 +227,8 @@ function addonSummary(a) {
     if (a.load !== "springs") html += `<li>Fits a Tindeq Progressor (about ${TINDEQ.length} × ${TINDEQ.width} × ${TINDEQ.thick} mm). It hangs in line on its eyes and never carries load through its case.</li>`;
     if (a.load !== "tindeq") {
       const s = a.spring;
-      html += `<li>${s.count} × compression spring ${s.wire} × ${s.od} × ${s.length} mm: about <b>${kg(s.totalKg)} kg</b> at full squeeze over ${s.travel} mm. Rail marks every 5 kg (${s.marks.join(", ")}); stops end the travel before the springs are overloaded.</li>`;
+      html += `<li>${s.count} × compression spring ${s.wire} × ${s.od} × ${s.length} mm: about <b>${kg(s.totalKg)} kg</b> at full squeeze over ${s.travel} mm. Stops end the travel before the springs are overloaded.</li>` +
+        `<li>Same print takes 2 or 4 springs (about ${kg(s.kg2)} or ${kg(s.kg4)} kg); one rail is marked for each. Wind the nuts behind the carriage in to pre-tension: harder from the start, same top load, marks stay right.</li>`;
     }
     html += a.brace === "legs"
       ? `<li>Leg push: feet flat on the front of the rest, cord through its ${a.notch} mm slot. Platform flat on the floor.</li>`
@@ -290,7 +293,7 @@ downloadBtn.addEventListener("click", async () => {
 
 function printNotes(info) {
   const pins = info.hardware.pins.map((p) => `    ${p.name.padEnd(7)} ${p.length} mm`).join("\n");
-  return gripperNotes(info, pins) + (info.addon ? addonNotes(info.addon) : "");
+  return gripperNotes(info, pins) + (info.addon ? addonNotes(info.addon) : "") + partsText(partsFor(info));
 }
 
 function addonNotes(a) {
@@ -325,16 +328,18 @@ ${common}
 Hardware
   2 x M4 threaded rod, ${a.rodLength} mm, with nuts + washers (clamps the parts together along the rails)
   Tindeq use: 1 carabiner (or a short loop of cord) from the Tindeq's far eye round the wall bridge
-  Spring use: ${s.count} x compression spring, wire ${s.wire} mm, OD ${s.od} mm, free length ${s.length} mm
-              ${s.count} x M4 threaded rod, ${s.guideLength} mm, 4 nuts each (spring guides)
+  Spring use: 2 or 4 x compression spring, wire ${s.wire} mm, OD ${s.od} mm, free length ${s.length} mm
+              (any shop, e.g. a mixed compression-spring box; all the same size)
+              1 x M4 threaded rod per spring, ${s.guideLength} mm, 3 nuts each (spring guides;
+              cut from a 1 m M4 threaded rod with a hacksaw)
               About 60 cm of 5-6 mm cord
 
 Assembly
   1. Butt the parts together, push the two long rods through the rails, tighten the nuts.
   2. Lay the gripper on its back on the two ledges, finger side toward the rest.
-  3. Springs (if used): fix a guide rod in each spring hole of the wall with a nut each side,
-     slide on the springs, then the carriage, then a stop nut behind it so the carriage rests
-     against the end posts.
+  3. Springs (if used): fix a guide rod in a spring hole of the wall with a nut each side,
+     slide on the spring, then the carriage, then a nut behind it. 4 springs: all four holes.
+     2 springs: two opposite corners (top-left + bottom-right), so the pull stays centred.
 
 Load: pick one, no reprint
   Tindeq only     cord from the gripper to the Tindeq's near eye; carabiner from its far eye
@@ -351,9 +356,17 @@ Brace: pick one
               level with the platform; don't lift the far end.
 
 Springs
-  About ${kg(s.totalKg)} kg at full squeeze over ${s.travel} mm (${s.kgPerMm} kg per mm), for the springs above.
+  About ${kg(s.totalKg)} kg at full squeeze over ${s.travel} mm (${s.kgPerMm} kg per mm) with ${s.count} springs.
+  More load: fit 4 springs (about ${kg(s.kg4)} kg), no reprint. Lighter: 2 (about ${kg(s.kg2)} kg).
   The carriage hits the stop posts at full squeeze, before the springs are overloaded.
-  The marks on the rails show where the carriage's front face sits at ${s.marks.join(", ")} kg.
+  Rail marks: seen from the palm rest, the LEFT rail is marked for 2 springs, the RIGHT rail
+  for 4. They show where the carriage's front face sits at each 5 kg (${s.marks.join(", ")} kg
+  with ${s.count}); the 10 kg marks are wider.
+
+  Pre-tension (adjust): with the nuts behind the carriage at the end posts the springs are just
+  touching. Wind every nut in by the same number of turns (M4: 0.7 mm per turn) to pre-squeeze
+  them: the pull starts harder and reaches full squeeze sooner. The top load is the same (the
+  stops decide it) and the marks still read right, because they go by carriage position.
   Calculated from the spring sizes; cheap springs vary about 20%. Check once with the Tindeq
   (Tindeq + springs) and trust its number.
 

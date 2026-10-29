@@ -282,7 +282,12 @@ for (const device of ["fdp", "fds"]) {
     if (!solidAt(rig, [(R.xW0 + R.xW1) / 2, R.Yc, R.Zc + R.window.r * Math.SQRT2 + ADDON_DIM.wall.over / 2], 1)) fail(`${tag}: no bridge above the wall window`);
     // A6
     const sp = R.spring;
-    for (const gh of rigGhosts(r, R, "both").filter((q) => q.kind === "spring")) {
+    // springs: every seat must take one (2 or 4 fitted on the same print)
+    if (sp.pos.length !== 4) fail(`${tag}: the platform has ${sp.pos.length} spring seats, needs 4 (2 or 4 springs, no reprint)`);
+    for (const { y, z } of sp.pos) if (!airAt(rig, [(R.xW0 + R.xW1) / 2, y, z], 0.5)) fail(`${tag}: no guide-rod hole in the wall at y=${y.toFixed(0)} z=${z.toFixed(0)}`);
+    const two = SP.count === 2 ? sp.used : [];
+    if (two.length && Math.abs(two.reduce((a, q) => a + q.y, 0) / 2 - R.Yc) + Math.abs(two.reduce((a, q) => a + q.z, 0) / 2 - R.Zc) > 0.1) fail(`${tag}: 2 springs don't pull through the cord line (lopsided)`);
+    for (const gh of rigGhosts(r, { ...R, spring: { ...sp, used: sp.pos } }, "both").filter((q) => q.kind === "spring")) {
       const c = common(rig, gh.shape);
       if (c > 0.5) fail(`${tag}: a spring clashes with the frame (${c.toFixed(0)} mm3)`);
     }
@@ -302,11 +307,13 @@ for (const device of ["fdp", "fds"]) {
       const limit = (0.45 * 2211) / d ** 0.145;
       if (tau > limit) fail(`${tag}: spring wire overloaded at full squeeze (${tau.toFixed(0)} MPa > ${limit.toFixed(0)} MPa)`);
     }
+    for (const n of [2, 4]) if (!R.marks.some((mk) => mk.n === n)) fail(`${tag}: no rail marks for ${n} springs`);
     for (const mk of R.marks) {
-      if (!airAt(rig, [mk.x, R.inner + ADDON_DIM.rail.w / 2, ADDON_DIM.rail.h - 0.5], 0.4)) fail(`${tag}: ${mk.kg} kg mark missing on the rail`);
-      const dx = (mk.kg * 9.81) / (m.count * m.k) - ADDON_DIM.spring.preload;
-      if (Math.abs(R.xC0 - mk.x - dx) > 0.05) fail(`${tag}: ${mk.kg} kg mark is in the wrong place`);
+      if (!airAt(rig, [mk.x, mk.rail * (R.inner + ADDON_DIM.rail.w / 2), ADDON_DIM.rail.h - 0.5], 0.4)) fail(`${tag}: ${mk.kg} kg mark (${mk.n} springs) missing on the rail`);
+      const dx = (mk.kg * 9.81) / (mk.n * m.k) - ADDON_DIM.spring.preload;
+      if (Math.abs(R.xC0 - mk.x - dx) > 0.05) fail(`${tag}: ${mk.kg} kg mark (${mk.n} springs) is in the wrong place`);
     }
+    if (R.screen.kg + 0.05 < springMath({ ...SP, count: 4 }).totalKg) fail(`${tag}: strength screen ignores the 4-spring load (${R.screen.kg} kg)`);
     // A8
     for (const it of R.screen.items) if (!it.ok) fail(`${tag}: strength screen: ${it.part} ${it.value} > ${it.allow} ${it.unit}`);
     console.log(`ok?  ${tag}: ${parts.length} pieces, ${R.xEnd.toFixed(0)} x ${(2 * R.outer).toFixed(0)} mm, palm ${R.Zp} mm, cord z ${R.Zc.toFixed(0)}, ${sp.totalKg.toFixed(0)} kg over ${sp.travel.toFixed(0)} mm`);

@@ -61,7 +61,7 @@ function addonInfo(kind, R, parts) {
   const info = { ...base, length: Math.round(R.xEnd), width: Math.round(2 * R.outer), rodLength: R.rodLength, travel: 50, palmHeight: R.Zp };
   {
     const s = R.spring;
-    info.spring = { count: s.count, k: +s.k.toFixed(2), travel: +s.travel.toFixed(1), totalKg: +s.totalKg.toFixed(1), kgPerMm: +s.kgPerMm.toFixed(2), limitedBy: s.limitedBy, od: s.OD, wire: s.d, length: s.L0, marks: R.marks.map((m) => m.kg), guideLength: Math.ceil(R.xEnd - R.xW0 + 10) };
+    info.spring = { count: s.count, k: +s.k.toFixed(2), travel: +s.travel.toFixed(1), totalKg: +s.totalKg.toFixed(1), kgPerMm: +s.kgPerMm.toFixed(2), limitedBy: s.limitedBy, od: s.OD, wire: s.d, length: s.L0, marks: R.marks.filter((m) => m.n === s.count).map((m) => m.kg), kg2: +s.kg2.toFixed(1), kg4: +s.kg4.toFixed(1), guideLength: Math.ceil(R.xEnd - R.xW0 + 10) };
   }
   return info;
 }

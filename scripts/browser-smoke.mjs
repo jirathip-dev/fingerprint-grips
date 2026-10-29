@@ -90,6 +90,14 @@ const springBoxHidden = await ev(`document.querySelector('#spring-box').hidden`)
 await radio("load", "springs");
 await waitFor(`!document.querySelector('#spring-box').hidden && document.querySelector('#summary').innerText.includes('springs, palm push')`, 90000);
 console.log(`6 platform         Tindeq: spring inputs hidden=${springBoxHidden}; springs: shown`);
+{
+  // parts list: spring line + working shop searches for the chosen springs
+  const parts = await ev(`[...document.querySelectorAll('#summary .parts li')].map(l => l.querySelector('b').textContent.toLowerCase() + ' | ' + [...l.querySelectorAll('a')].map(a => a.href).join(' '))`);
+  const spring = parts.find((p) => p.startsWith("compression springs"));
+  if (!spring || !spring.includes("lazada.co.th/catalog/?q=") || !spring.includes("aliexpress.com/wholesale")) throw new Error("parts list has no spring line with shop searches: " + JSON.stringify(parts));
+  if (!parts.some((p) => p.startsWith("3 mm steel rod")) || !parts.some((p) => p.startsWith("m4 threaded rod"))) throw new Error("parts list missing pins or rods");
+  console.log(`  parts list       ${parts.length} lines: ${parts.map((p) => p.split(" | ")[0]).join(", ")}`);
+}
 const kgBefore = await ev(`document.querySelector('#spring-out').innerText`);
 await radio("springCount", "4");
 await waitFor(`document.querySelector('#spring-out').innerText !== ${JSON.stringify(kgBefore)}`);
