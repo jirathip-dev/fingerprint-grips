@@ -28,6 +28,25 @@
 
           <div class="grid" id="finger-grid"></div>
 
+          <fieldset class="choice addon">
+            <legend>Add-on</legend>
+            <label><input type="radio" name="addon" value="none" checked /> None</label>
+            <label><input type="radio" name="addon" value="table" /> <b>Table rig</b> <span>Tindeq</span></label>
+            <label><input type="radio" name="addon" value="spring" /> <b>Spring trainer</b> <span>portable</span></label>
+            <label><input type="radio" name="addon" value="foot" /> <b>Foot plate</b> <span>Tindeq</span></label>
+          </fieldset>
+          <p id="addon-blurb" class="blurb"></p>
+          <div id="spring-box" class="spring-box" hidden>
+            <p class="spring-head">Your springs <span>(compression springs, from the shop listing)</span></p>
+            <div class="spring-grid" id="spring-grid"></div>
+            <fieldset class="choice count">
+              <legend>How many</legend>
+              <label><input type="radio" name="springCount" value="2" checked /> 2</label>
+              <label><input type="radio" name="springCount" value="4" /> 4</label>
+            </fieldset>
+            <p id="spring-out" class="spring-out"></p>
+          </div>
+
           <details class="how">
             <summary>How do I measure?</summary>
             <ol>

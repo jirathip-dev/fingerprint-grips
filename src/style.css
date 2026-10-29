@@ -15,8 +15,8 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .panel { padding: 24px; overflow-y: auto; border-right: 1px solid var(--line); background: var(--panel); }
 h1 { margin: 0 0 4px; font-size: 26px; }
 .lede { margin: 0 0 18px; color: var(--muted); line-height: 1.45; }
-.choice { border: 0; padding: 0; margin: 0 0 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.choice legend { float: left; width: 70px; color: var(--muted); }
+.choice { border: 0; padding: 0 0 0 80px; margin: 0 0 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: relative; }
+.choice legend { position: absolute; left: 0; top: 8px; width: 74px; padding: 0; color: var(--muted); }
 .choice label {
   display: flex; align-items: center; gap: 6px; padding: 7px 12px; cursor: pointer;
   border: 1px solid var(--line); border-radius: 8px; background: #11141a;
@@ -65,5 +65,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .banner { margin: 18px 0 0; padding: 10px 12px; font-size: 13px; line-height: 1.5; border: 1px solid #7a4a1c; background: #2a1d12; border-radius: 8px; }
 .ack { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 4px; font-size: 13px; color: var(--muted); line-height: 1.4; cursor: pointer; }
 .ack input { margin-top: 2px; }
+.choice.addon { margin-top: 16px; }
+.spring-box { margin: 4px 0 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #11141a; }
+.spring-head { margin: 0 0 8px; font-size: 14px; }
+.spring-head span { color: var(--muted); font-size: 12px; }
+.spring-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.spring-grid label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.spring-box .choice { margin: 10px 0 0; padding-left: 80px; }
+.spring-out { margin: 10px 0 0; font-size: 13px; line-height: 1.5; }
+.spring-out b { color: var(--accent); }
+.screen-bad { color: var(--bad); }
 .credits { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.5; }
 .credits a { color: var(--muted); }

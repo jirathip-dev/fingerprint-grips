@@ -217,7 +217,10 @@ export function layout(device, hand) {
 
 /**
  * Build the solids. `r` is the replicad module (passed in so this file has no imports).
- * device: "fdp" | "fds", side: "right" | "left" (left = mirror image).
+ * device: "fdp" | "fds", side: "right" | "left".
+ * The layout is built with the pinky at x = 0. Seen from the hand side (looking +Y,
+ * Z up) +X is on your right, so the unmirrored layout has the pinky on your left:
+ * that is a LEFT hand (palm toward the gripper, fingers up). The right hand is the mirror.
  */
 export function buildGripper(r, hand, { device = "fdp", side = "right" } = {}) {
   const L = layout(device, hand);
@@ -279,9 +282,12 @@ export function buildGripper(r, hand, { device = "fdp", side = "right" } = {}) {
   tools.delete?.();
 
   let out = parts;
-  if (side === "left") out = parts.map((p) => ({ ...p, shape: p.shape.mirror("YZ", [L.width / 2, 0, 0]) }));
+  if (mirrored(side)) out = parts.map((p) => ({ ...p, shape: p.shape.mirror("YZ", [L.width / 2, 0, 0]) }));
   return { parts: out, layout: L, info: summarize(L, side) };
 }
+
+/** True for the hand whose parts are the mirror image of the layout (pinky at x = 0 is the left hand). */
+export const mirrored = (side) => side === "right";
 
 function rollerDip(r) {
   const R = DIM.roller;
@@ -323,7 +329,7 @@ function cordTunnel(r, L) {
 export function printOrient(shape, kind, side) {
   // slices: wall face down, so the pull runs along the layers.
   // rollers: end face down. Both are a quarter turn about Y.
-  const s = shape.rotate(side === "left" ? 90 : -90, [0, 0, 0], [0, 1, 0]);
+  const s = shape.rotate(mirrored(side) ? 90 : -90, [0, 0, 0], [0, 1, 0]);
   const [min] = s.boundingBox.bounds;
   return s.translate([-min[0], -min[1], -min[2]]);
 }
@@ -336,7 +342,7 @@ function summarize(L, side) {
     width: L.width,
     depth: -L.yF,
     height: L.zTop - L.zBottom,
-    cord: { x: side === "left" ? L.width - L.cord.x : L.cord.x, diameter: 2 * L.cord.half, spread: round1(L.cord.spread) },
+    cord: { x: mirrored(side) ? L.width - L.cord.x : L.cord.x, diameter: 2 * L.cord.half, spread: round1(L.cord.spread) },
     slots: L.slots.map((s) => ({
       name: s.name,
       rollerDiameter: round1(2 * s.r),

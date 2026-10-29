@@ -1,6 +1,7 @@
 // Headless geometry gate. Builds FDP + FDS for both hands and checks what makes
 // a gripper printable and usable. Run: npm run check   (exit 1 on any failure)
 //
+//  0. right hand has the pinky on the right as seen from the hand side (and vice versa)
 //  1. every part is a valid closed solid (and its STL mesh is watertight)
 //  2. rollers clear the frame and clear each other
 //  3. slices don't overlap each other (they assemble)
@@ -11,11 +12,26 @@
 //  8. every roller is a spool: raised rims, concave waist
 //  7. every printed part fits a 256 mm Bambu A1 bed
 //  8. bad input is rejected
+// Add-ons (table rig, spring trainer, foot plate), for FDP + FDS:
+//  A1. every printed piece is a valid watertight solid that fits the bed (<= 236 mm)
+//  A2. the gripper sits on the ledges between the rails: touching, not sinking in, not clashing
+//  A3. palm rest top is level with the middle finger's way in (+-6 mm); heel and fingers pull in line
+//  A4. the cord runs straight from the gripper holes to the anchor: nothing printed in its way
+//  A5. table: the Tindeq stand-in clears every printed part by >= 2 mm (it hangs on its eyes only);
+//      the carabiner window goes through the anchor wall and has a solid bridge above it
+//  A6. spring: springs clear the frame, stop posts end the travel before the wire's limit,
+//      the kg marks are cut where the maths says
+//  A7. foot plate: carabiner hole goes right through the fin, solid bridge above it
+//  A8. strength screen passes at the rating x design factor; spring maths matches a hand calc
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import opencascade from "replicad-opencascadejs";
 import * as r from "replicad";
-import { buildGripper, printOrient, validate, DEFAULT_HAND, DIM } from "../src/model.js";
+import { buildGripper, printOrient, validate, DEFAULT_HAND, DIM, mirrored } from "../src/model.js";
+import {
+  rigLayout, buildRig, rigGhosts, buildFoot, footLayout, placeInRig, printOrientAddon,
+  springMath, validateSpring, SPRING_DEFAULT, ADDON_DIM, TINDEQ,
+} from "../src/accessories.js";
 
 const require = createRequire(import.meta.url);
 r.setOC(await opencascade({ wasmBinary: readFileSync(require.resolve("replicad-opencascadejs/wasm")) }));
@@ -49,7 +65,8 @@ function watertight(stlBuf) {
 }
 
 mkdirSync("out", { recursive: true });
-for (const device of ["fdp", "fds"]) {
+const ADDONS_ONLY = !!process.env.CHECK_ADDONS_ONLY; // mutation runs: skip the gripper section
+for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
   for (const side of ["right", "left"]) {
     const tag = `${device}/${side}`;
     const { parts, layout: L, info } = buildGripper(r, DEFAULT_HAND, { device, side });
@@ -57,7 +74,14 @@ for (const device of ["fdp", "fds"]) {
     const rollers = parts.filter((p) => p.kind === "roller");
     let frame = frames[0].shape.clone();
     for (const p of frames.slice(1)) frame = frame.fuse(p.shape.clone());
-    const X = (x) => (side === "left" ? L.width - x : x); // mirror x for the left hand
+    const X = (x) => (mirrored(side) ? L.width - x : x); // layout x -> built x
+
+    // 0. handedness (spec, not layout): the user stands on the hand side (-Y) looking +Y with
+    //    Z up, so +X is on their right. Right hand, palm toward the gripper, fingers up:
+    //    thumb/index on the LEFT, pinky on the RIGHT. Left hand is the opposite.
+    const cx = (n) => { const [lo, hi] = rollers.find((q) => q.name === `roller_${n}`).shape.boundingBox.bounds; return (lo[0] + hi[0]) / 2; };
+    const pinkyRight = cx("pinky") > cx("index");
+    if (pinkyRight !== (side === "right")) fail(`${tag}: wrong hand: seen from the hand side the pinky is on the ${pinkyRight ? "right" : "left"}`);
 
     // 1. valid solids, watertight meshes, fits the bed
     let triTotal = 0;
@@ -99,9 +123,9 @@ for (const device of ["fdp", "fds"]) {
     // 5. cord tunnel: enclosed shell all round, open only at the two top holes
     const c = L.cord;
     const shell = 3;
-    const MX = (x) => (side === "left" ? L.width - x : x);
+    const MX = X;
     const env = box(c.xa - c.half - shell, c.xb + c.half + shell, c.y - c.half - shell, c.y + c.half + shell, c.bottom - shell, L.zTop - 0.01);
-    const envX = side === "left" ? env.clone().mirror("YZ", [L.width / 2, 0, 0]) : env;
+    const envX = mirrored(side) ? env.clone().mirror("YZ", [L.width / 2, 0, 0]) : env;
     const tunnelVol = vol(envX.clone()) - common(frame, envX);
     // U profile area below the top face: outer rounded rect minus inner, bottom corners rounded
     const k = 2 * (1 - Math.PI / 4);
@@ -169,6 +193,138 @@ for (const device of ["fdp", "fds"]) {
     console.log(`ok?  ${tag}: ${parts.length} parts, ${info.width.toFixed(0)} x ${info.depth.toFixed(0)} x ${info.height.toFixed(0)} mm, ${triTotal} tris | rollers ${sl} | cord tunnel ${tunnelVol.toFixed(0)}/${tunnelExpected.toFixed(0)} mm3`);
   }
 }
+
+// ------------------------------------------------------------------ add-ons
+const BED = 236; // spec, not layout: Bambu A1 256 mm bed minus margins
+const TIP_ROOM = 10; // spec: FDS fingertips come out of the open back, so they need this much air under the gripper
+const fuseAll = (list) => list.slice(1).reduce((a, p) => a.fuse(p.shape.clone()), list[0].shape.clone());
+for (const device of ["fdp", "fds"]) {
+  const g = buildGripper(r, DEFAULT_HAND, { device, side: "right" });
+  for (const [kind, SP] of [["table", SPRING_DEFAULT], ["spring", SPRING_DEFAULT], ["spring", { ...SPRING_DEFAULT, count: 4 }]]) {
+    const tag = `${device}+${kind}${kind === "spring" ? `x${SP.count}` : ""}`;
+    const R = rigLayout(kind, g.layout, g.info, SP);
+    const parts = buildRig(r, R);
+    // A1
+    for (const p of parts) {
+      const o = printOrientAddon(p.shape.clone(), p.print);
+      const buf = Buffer.from(await o.blobSTL({ tolerance: 0.05, angularTolerance: 0.2, binary: true }).arrayBuffer());
+      writeFileSync(`out/addon_${device}_${p.name}.stl`, buf);
+      const w = watertight(buf);
+      if (w.bad) fail(`${tag} ${p.name}: STL not watertight (${w.bad} open edges)`);
+      const [lo, hi] = o.boundingBox.bounds;
+      if (Math.max(hi[0] - lo[0], hi[1] - lo[1]) > BED + 0.01 || hi[2] - lo[2] > 250) fail(`${tag} ${p.name}: ${(hi[0] - lo[0]).toFixed(0)} x ${(hi[1] - lo[1]).toFixed(0)} mm does not fit the bed`);
+    }
+    const rig = fuseAll(parts.filter((p) => p.name.includes("_rig_")));
+    const placed = g.parts.map((p) => ({ ...p, shape: placeInRig(p.shape.clone(), g.layout, R.zl, R.gripperX0) }));
+    const grip = fuseAll(placed.filter((p) => p.kind === "frame"));
+    // A2: at both ends of the cord travel
+    for (const x0 of [R.xPalm, R.xPalm + ADDON_DIM.travel]) {
+      const gx = fuseAll(g.parts.filter((p) => p.kind === "frame").map((p) => ({ shape: placeInRig(p.shape.clone(), g.layout, R.zl, x0) })));
+      const clash = common(rig, gx);
+      if (clash > 1) fail(`${tag}: gripper clashes with the rig at ${x0 - R.xPalm} mm (${clash.toFixed(0)} mm3)`);
+      const lifted = gx.clone().translate([0, 0, -0.6]);
+      if (common(rig, lifted) < 20) fail(`${tag}: gripper is not resting on the ledges at ${x0 - R.xPalm} mm`);
+    }
+    // A2b: FDS tips pass out through the open back, which faces the table: keep air under every slot
+    if (device === "fds") {
+      for (const sl of g.layout.slots) {
+        // right hand is built mirrored (x -> W - x); placeInRig maps built x -> rig y = W/2 - x
+        const yRig = sl.xs + sl.w / 2 - R.Wg / 2;
+        const xRig = R.gripperX0 - g.layout.zBottom + sl.zc; // under the roller
+        const room = r.makeBox([xRig - 4, yRig - 3, 0.5], [xRig + 4, yRig + 3, TIP_ROOM]);
+        if (common(rig, room) > 0.5) fail(`${tag} ${sl.name}: no room under the gripper for the fingertips (needs ${TIP_ROOM} mm)`);
+      }
+      if (R.zl < TIP_ROOM) fail(`${tag}: gripper sits only ${R.zl} mm above the table; FDS tips need ${TIP_ROOM} mm`);
+    }
+    // A3: palm rest top vs the middle finger's way in, in rig coordinates
+    const mid = g.layout.slots.find((s) => s.name === "middle");
+    const entryZ = R.zl + (-mid.yFront - g.layout.yF) / 2;
+    if (Math.abs(R.Zp - entryZ) > 6) fail(`${tag}: palm rest top ${R.Zp} mm vs finger entry ${entryZ.toFixed(0)} mm`);
+    if (!solidAt(rig, [ADDON_DIM.palm.root - ADDON_DIM.palm.top / 2, 0, R.Zp - 1.5], 0.5)) fail(`${tag}: no palm rest bar at the centre`);
+    // A4: cord line from the gripper's holes to the anchor
+    const xFrom = R.gripperX0 + R.Hg + 1;
+    const xTo = kind === "table" ? R.xEnd + 1 : R.xC1 + 1;
+    if (kind === "spring" && (R.carriageY[0] < -R.inner + 0.5 || R.carriageY[1] > R.inner - 0.5)) fail(`${tag}: carriage is wider than the gap between the rails`);
+    if (R.problems?.length) fail(`${tag}: layout refused a valid default: ${R.problems[0]}`);
+    const ray = r.makeCylinder(2.5, xTo - xFrom, [xFrom, R.Yc, R.Zc], [1, 0, 0]);
+    const blocked = common(rig, ray);
+    if (blocked > 0.5) fail(`${tag}: the cord line is blocked (${blocked.toFixed(0)} mm3 of printed part in the way)`);
+    if (kind === "table") {
+      // A5
+      const [t] = rigGhosts(r, R);
+      const grown = t.shape.clone();
+      const T = TINDEQ;
+      const env = r.makeBox([R.xMod + (ADDON_DIM.tindeq.bay - T.length) / 2 - 2, R.Yc - T.width / 2 - 2, R.Zc - T.thick / 2 - 2], [R.xMod + (ADDON_DIM.tindeq.bay + T.length) / 2 + 2, R.Yc + T.width / 2 + 2, R.Zc + T.thick / 2 + 2]);
+      const touch = common(rig, env);
+      if (touch > 0.5) fail(`${tag}: a printed part is within 2 mm of the Tindeq (${touch.toFixed(0)} mm3)`);
+      grown.delete?.();
+      if (!airAt(rig, [R.xA + ADDON_DIM.wall.t / 2, R.Yc, R.Zc], 1)) fail(`${tag}: no carabiner window through the anchor wall`);
+      if (!solidAt(rig, [R.xA + ADDON_DIM.wall.t / 2, R.Yc, R.wallTop - ADDON_DIM.wall.over / 2], 1)) fail(`${tag}: no bridge above the carabiner window`);
+      // the Tindeq must sit between the side guides
+      for (const y0 of R.guideY) if (!solidAt(rig, [R.xMod + ADDON_DIM.tindeq.bay / 2, y0 + ADDON_DIM.tindeq.guideT / 2, R.guideTop - 2], 0.5)) fail(`${tag}: side guide missing at y=${y0.toFixed(0)}`);
+    } else {
+      // A6
+      const sp = R.spring;
+      for (const gh of rigGhosts(r, R).filter((q) => q.kind === "spring")) {
+        const c = common(rig, gh.shape);
+        if (c > 0.5) fail(`${tag}: a spring clashes with the frame (${c.toFixed(0)} mm3)`);
+      }
+      const carriage = parts.find((p) => p.name === "spring_carriage").shape;
+      if (common(rig, carriage) > 0.5) fail(`${tag}: the carriage clashes with the frame at rest`);
+      // full squeeze: carriage moved toward the wall by the travel -> touches the stops, no further
+      const atStop = carriage.clone().translate([-sp.travel, 0, 0]);
+      if (common(rig, atStop) > 0.5) fail(`${tag}: carriage runs into the frame before full travel`);
+      const past = carriage.clone().translate([-sp.travel - 1, 0, 0]);
+      if (common(rig, past) < 5) fail(`${tag}: nothing stops the carriage at full travel (springs could be overloaded)`);
+      const m = springMath(SP);
+      const hand = (79300 * 2 ** 4) / (8 * 14 ** 3 * 6); // 2 mm wire, 16 OD, 8 coils: k by hand
+      if (Math.abs(m.k - hand) > 0.01) fail(`${tag}: spring rate ${m.k.toFixed(3)} != hand calc ${hand.toFixed(3)} N/mm`);
+      if (m.travel > m.L0 - 1 - m.solid - ADDON_DIM.spring.preload + 1e-9) fail(`${tag}: travel would take the spring solid`);
+      // independent wire check at full squeeze: Wahl shear <= 45% of tensile strength (music wire fit)
+      {
+        const d = SP.wire, D = SP.od - d, C = D / d;
+        const Kw = (4 * C - 1) / (4 * C - 4) + 0.615 / C;
+        const Fmax = m.k * (m.travel + ADDON_DIM.spring.preload);
+        const tau = (Kw * 8 * Fmax * D) / (Math.PI * d ** 3);
+        const limit = 0.45 * 2211 / d ** 0.145;
+        if (tau > limit) fail(`${tag}: spring wire overloaded at full squeeze (${tau.toFixed(0)} MPa > ${limit.toFixed(0)} MPa)`);
+      }
+      for (const mk of R.marks) {
+        const x = mk.x;
+        if (!airAt(rig, [x, R.inner + ADDON_DIM.rail.w / 2, ADDON_DIM.rail.h - 0.5], 0.4)) fail(`${tag}: ${mk.kg} kg mark missing on the rail`);
+        const dx = (mk.kg * 9.81) / (m.count * m.k) - ADDON_DIM.spring.preload;
+        if (Math.abs(R.xC0 - x - dx) > 0.05) fail(`${tag}: ${mk.kg} kg mark is in the wrong place`);
+      }
+    }
+    // A8
+    for (const it of R.screen.items) if (!it.ok) fail(`${tag}: strength screen: ${it.part} ${it.value} > ${it.allow} ${it.unit}`);
+    console.log(`ok?  ${tag}: ${parts.length} pieces, ${R.xEnd.toFixed(0)} x ${(2 * R.outer).toFixed(0)} mm, palm ${R.Zp} mm, cord z ${R.Zc.toFixed(0)}${kind === "spring" ? `, ${R.spring.totalKg.toFixed(0)} kg over ${R.spring.travel.toFixed(0)} mm` : ""}`);
+  }
+}
+{
+  // A7 foot plate
+  const P = footLayout();
+  const [foot] = buildFoot(r, P);
+  const buf = Buffer.from(await printOrientAddon(foot.shape.clone(), "flat").blobSTL({ tolerance: 0.05, angularTolerance: 0.2, binary: true }).arrayBuffer());
+  writeFileSync("out/addon_foot_plate.stl", buf);
+  if (watertight(buf).bad) fail("foot plate STL not watertight");
+  const [lo, hi] = foot.shape.boundingBox.bounds;
+  if (hi[0] - lo[0] > ADDON_DIM.maxPiece || hi[1] - lo[1] > ADDON_DIM.maxPiece) fail("foot plate does not fit the bed");
+  for (const y of [-P.finT / 2 + 0.6, 0, P.finT / 2 - 0.6]) if (!airAt(foot.shape, [P.len / 2, y, P.t + P.holeZ], 1)) fail(`foot plate: carabiner hole blocked at y=${y}`);
+  const zb = P.t + P.holeZ + (P.holeD / 2) * Math.SQRT2 + P.over / 2;
+  if (!solidAt(foot.shape, [P.len / 2, 0, zb], 1)) fail("foot plate: no bridge above the carabiner hole");
+  for (const it of P.screen.items) if (!it.ok) fail(`foot plate: strength screen: ${it.part} ${it.value} > ${it.allow}`);
+  console.log(`ok?  foot plate: ${P.len} x ${P.width} mm, hole ${P.holeD} mm`);
+}
+if (validateSpring({ ...SPRING_DEFAULT, od: 7 }).length === 0) fail("a spring too small for the guide rod was accepted");
+if (validateSpring({ ...SPRING_DEFAULT, count: 3 }).length === 0) fail("3 springs (lopsided) were accepted");
+{
+  // springs that pass the shop-size validator but can't fit this rig must be refused, not built broken
+  const g = buildGripper(r, DEFAULT_HAND, { device: "fds", side: "right" });
+  const fat = rigLayout("spring", g.layout, g.info, { wire: 3.5, od: 30, length: 60, coils: 10, count: 4 });
+  if (!fat.problems.length) fail("4 x 30 mm springs were laid out even though they can't fit under the cord line");
+}
+if (validateSpring(SPRING_DEFAULT).length) fail("the default spring was rejected: " + validateSpring(SPRING_DEFAULT)[0]);
 
 const bad = structuredClone(DEFAULT_HAND);
 bad.middle.length = 300;
