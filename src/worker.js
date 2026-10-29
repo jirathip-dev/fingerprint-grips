@@ -3,7 +3,7 @@ import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
 import * as replicad from "replicad";
 import { buildGripper, printOrient, validate } from "./model.js";
-import { rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, placeOverFoot, printOrientAddon, validateSpring, massG, SPRING_DEFAULT, ADDON_DIM, TINDEQ } from "./accessories.js";
+import { rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, placeOverFoot, printOrientAddon, validateSpring, massG, cordSeg, loopCord, SPRING_DEFAULT, ADDON_DIM, TINDEQ } from "./accessories.js";
 
 const ready = (async () => {
   const OC = await opencascade({ locateFile: () => wasmUrl });
@@ -35,22 +35,28 @@ function buildAddon(addon, gripper, spring, load, brace) {
   const R = rigLayout(gripper.layout, gripper.info, spring);
   if (R.problems?.length) throw Object.assign(new Error(R.problems[0]), { problems: R.problems });
   const parts = buildRig(replicad, R);
-  const info = { ...addonInfo("platform", R, parts), load, brace, notch: ADDON_DIM.palm.notch };
-  // Palm push: gripper on the ledges. Leg push: same print, but the gripper is in your hands
-  // in front of the rest (feet on the rest's front face), cord through the slot in the rest.
+  const info = { ...addonInfo("platform", R, parts), load, brace, legHole: ADDON_DIM.palm.hole, strapW: ADDON_DIM.strap.w - 2 };
+  // Palm push: gripper on the ledges. Leg push: same print, but the gripper is in your hands,
+  // in front of and above the rest; the cord comes out of the hole low in the rest.
   const L = gripper.layout, Hg = L.zTop - L.zBottom;
-  const x0 = brace === "legs" ? -Hg - ADDON_DIM.legReach : R.gripperX0;
-  const ghosts = [...rigGhosts(replicad, R, load), ...cordGhosts(R, x0 + Hg, load)];
-  return { parts, ghosts, info, place: (s) => placeInRig(s, L, R.zl, x0) };
+  const legs = brace === "legs";
+  const x0 = legs ? -Hg - ADDON_DIM.legReach : R.gripperX0;
+  const lift = legs ? ADDON_DIM.legLift : 0;
+  const ghosts = [...rigGhosts(replicad, R, load), ...cordGhosts(R, x0 + Hg, lift, load)];
+  return { parts, ghosts, info, place: (s) => placeInRig(s, L, R.zl, x0).translate([0, 0, lift]) };
 }
 
-/** Preview-only cord along the platform's cord line: gripper -> Tindeq -> springs. */
-function cordGhosts(R, xFrom, load) {
-  const seg = (a, b) => ({ name: "cord", kind: "cord", shape: replicad.makeCylinder(2.5, b - a, [a, R.Yc, R.Zc], [1, 0, 0]) });
-  const knot = R.xC1 + 4;
-  if (load === "springs") return [seg(xFrom, knot)];
-  const out = [seg(xFrom, R.xT0)];
-  if (load === "both") out.push(seg(R.xT0 + TINDEQ.length, knot));
+/** Preview-only cord: gripper -> (rest hole) -> Tindeq and/or the U loop round the carriage. */
+function cordGhosts(R, xFrom, lift, load) {
+  const c = (shape) => ({ name: "cord", kind: "cord", shape });
+  const P = (x, z = R.Zc) => [x, R.Yc, z];
+  const to = load === "springs" ? R.loopEnd.springs : R.xT0;
+  const out = [];
+  if (lift) {
+    out.push(c(cordSeg(replicad, P(xFrom, R.Zc + lift), P(R.legHole.xMouth))));
+    out.push(c(cordSeg(replicad, P(R.legHole.xMouth), P(to))));
+  } else out.push(c(cordSeg(replicad, P(xFrom), P(to))));
+  if (load !== "tindeq") for (const s of loopCord(replicad, R, load)) out.push(c(s));
   return out;
 }
 

@@ -17,7 +17,7 @@
 //  A2. the gripper sits on the ledges between the rails: touching, not sinking in, not clashing;
 //      FDS fingertips have room under it
 //  A3. palm rest top is level with the middle finger's way in (+-6 mm); heel and fingers pull in line
-//  A4. one straight cord line from the front of the rest (leg-push slot) through the gripper
+//  A4. one straight cord line from the front of the rest (leg-push hole) through the gripper
 //      position, the Tindeq bay, the wall window and the carriage: nothing printed in its way
 //  A5. Tindeq: clears every printed part by >= 2 mm over its whole run (it moves with the springs),
 //      never reaches the gripper's knot; side guides; window through the wall, bridge above it
@@ -33,7 +33,7 @@ import * as r from "replicad";
 import { buildGripper, printOrient, validate, layout, DEFAULT_HAND, DIM, mirrored, PIN_LENGTHS, BOLT_LENGTHS, PIN_ENGAGE, BOLT_SPARE, CS, CS_LENGTHS, csBoltFor } from "../src/model.js";
 import {
   rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, printOrientAddon,
-  springMath, validateSpring, SPRING_DEFAULT, ADDON_DIM, TINDEQ,
+  springMath, validateSpring, loopCord, SPRING_DEFAULT, ADDON_DIM, TINDEQ,
 } from "../src/accessories.js";
 
 const require = createRequire(import.meta.url);
@@ -242,7 +242,8 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
 const BED = 236; // spec, not layout: Bambu A1 256 mm bed minus margins
 const TIP_ROOM = 10; // spec: FDS fingertips come out of the open back, so they need this much air under the gripper
 const KNOT_ROOM = 10; // spec: the cord knot behind the gripper needs this much before the Tindeq can reach it
-const SLOT_MAX = 14; // spec: leg-push slot fits a 5-6 mm cord; wider leaves less rest for the heel
+const HOLE_MAX = 16; // spec: leg-push hole fits a 5-6 mm cord; wider leaves less rest for the heel
+const STRAP = 25; // spec: a 25 mm strap goes through the slots
 const FOOT_W = 110; // spec: a wide adult foot (about EU 46) fits between the lugs
 const INSTEP = { w: 90, h: 80 }; // spec: across and above the sole at the arch, where the cords pass
 const fuseAll = (list) => list.slice(1).reduce((a, p) => a.fuse(p.shape.clone()), list[0].shape.clone());
@@ -340,9 +341,29 @@ for (const device of ["fdp", "fds"]) {
     const ray = r.makeCylinder(2.5, R.xC1 + 2, [-1, R.Yc, R.Zc], [1, 0, 0]);
     const blocked = common(rig, ray);
     if (blocked > 0.5) fail(`${tag}: the cord line is blocked (${blocked.toFixed(0)} mm3 of printed part in the way)`);
-    const xs = ADDON_DIM.palm.root - ADDON_DIM.palm.top / 2, zs = R.Zp - 2; // top of the rest, where the heel goes
-    if (!airAt(rig, [xs, R.Yc, zs], 1)) fail(`${tag}: leg-push slot not open from the top of the rest (cord can't drop in)`);
-    for (const k of [-1, 1]) if (!solidAt(rig, [xs, R.Yc + k * (SLOT_MAX / 2 + 1), zs], 0.5)) fail(`${tag}: leg-push slot is wider than ${SLOT_MAX} mm`);
+    // A4b leg push: the cord leaves through a CLOSED hole low in the rest (it can't lift out when
+    // the hands are higher), the rest is solid over it, a strap goes through slots each side
+    {
+      const H = R.legHole, xm = ADDON_DIM.palm.root - 6;
+      if (!airAt(rig, [xm, R.Yc, R.Zc], 2)) fail(`${tag}: no leg-push cord hole through the rest`);
+      if (!solidAt(rig, [xm, R.Yc, H.z + H.r * Math.SQRT2 + 2], 0.8)) fail(`${tag}: leg-push hole is open at the top (the cord can lift out)`);
+      for (const k of [-1, 1]) if (!solidAt(rig, [xm, R.Yc + k * (HOLE_MAX / 2 + 1), H.z], 0.5)) fail(`${tag}: leg-push hole is wider than ${HOLE_MAX} mm`);
+      // cord from the hands, 60° up, must leave the mouth without touching a sharp edge: the
+      // flare clears a 5 mm cord leaving at up to 60° from the roof line
+      const zRoof = H.z + H.r - 2.5;
+      const up = r.makeCylinder(2.5, 60, [H.xMouth + 1, R.Yc, zRoof], [-Math.cos(Math.PI / 3), 0, Math.sin(Math.PI / 3)]);
+      if (common(rig, up) > 2) fail(`${tag}: cord rising to the hands rubs a sharp edge at the hole mouth (${common(rig, up).toFixed(1)} mm3)`);
+      // the flare itself: a point 3 mm inside the face, beside and above the hole, is outside the
+      // plain hole but inside the flare
+      if (!airAt(rig, [H.xMouth + 3, R.Yc + 6, H.z + 6], 0.5)) fail(`${tag}: no flare at the leg-push hole mouth: the cord would bend over a sharp edge`);
+      for (const k of [-1, 1]) {
+        const ys = k > 0 ? R.strap.y : [-R.strap.y[1], -R.strap.y[0]];
+        const probe = r.makeBox([-1, ys[0] + 0.5, R.strap.z[0] + 0.5], [ADDON_DIM.palm.root + 1, ys[1] - 0.5, R.strap.z[1] - 0.5]);
+        if (common(rig, probe) > 0.5) fail(`${tag}: strap slot ${k > 0 ? "right" : "left"} blocked`);
+        if (ys[1] - ys[0] < STRAP + 1) fail(`${tag}: strap slot narrower than a ${STRAP} mm strap`);
+        if (!solidAt(rig, [ADDON_DIM.palm.root / 2, (ys[0] + ys[1]) / 2, R.strap.z[1] + 2], 0.8)) fail(`${tag}: nothing over the strap slot`);
+      }
+    }
     // A5: Tindeq envelope over its whole run (+2 mm all round). The run comes from the spring
     // maths, not the layout: it moves toward you by the spring travel at full squeeze.
     const T = TINDEQ;
@@ -370,6 +391,21 @@ for (const device of ["fdp", "fds"]) {
       if (c > 0.5) fail(`${tag}: a spring clashes with the frame (${c.toFixed(0)} mm3)`);
     }
     const carriage = parts.find((p) => p.name === "spring_carriage").shape;
+    // A6b carriage cord: a U loop, no knot. Two holes through, a groove on the back joining them,
+    // and the loop clears every printed part (window, frame) at rest and at full squeeze.
+    {
+      const S = ADDON_DIM.spring;
+      for (const y of R.uY) if (!airAt(carriage, [(R.xC0 + R.xC1) / 2, y, R.Zc], 2.4)) fail(`${tag}: carriage cord hole missing at y=${y.toFixed(0)}`);
+      if (!airAt(carriage, [R.xC1 - 1, R.Yc, R.Zc], 2)) fail(`${tag}: no groove on the back of the carriage for the cord loop`);
+      if (!solidAt(carriage, [R.xC0 + 2, R.Yc, R.Zc], 1)) fail(`${tag}: no web between the carriage cord holes (the loop would pull through)`);
+      if (!solidAt(carriage, [R.xC0 + 3, R.Yc, R.Zc + S.uR + 2], 0.8)) fail(`${tag}: the carriage web is not joined to the top`);
+      for (const load of ["springs", "both"])
+        for (const dx of [0, sp.travel]) {
+          const hit = loopCord(r, R, load, dx, 2.4).reduce((a, s) => a + common(rig, s) + common(carriage.clone().translate([-dx, 0, 0]), s), 0);
+          if (hit > 1) fail(`${tag}: ${load} carriage loop rubs a printed part at ${dx ? "full squeeze" : "rest"} (${hit.toFixed(0)} mm3)`);
+        }
+      if (R.loopEnd.springs > R.xW0 - 10) fail(`${tag}: the carriage loop doesn't reach out of the wall`);
+    }
     if (common(rig, carriage) > 0.5) fail(`${tag}: the carriage clashes with the frame at rest`);
     if (R.carriageY[0] < -R.inner + 0.5 || R.carriageY[1] > R.inner - 0.5) fail(`${tag}: carriage is wider than the gap between the rails`);
     if (common(rig, carriage.clone().translate([-sp.travel, 0, 0])) > 0.5) fail(`${tag}: carriage runs into the frame before full travel`);

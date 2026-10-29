@@ -10,7 +10,8 @@
 //                both   : Tindeq in the bay AND springs: the Tindeq reads the spring force live
 //              Brace it two ways: heel of the hand on the rest (palm push, on a table), or
 //              feet flat against the rest's front face (leg push, on the floor; the cord
-//              leaves through a notch in the rest toward your hands).
+//              leaves through a closed hole low in the rest toward your hands; a strap
+//              over your feet through two slots in the rest holds the front down).
 //   foot     : a one-foot plate. A cord lug on each side of the foot; the two cords meet
 //              above the foot at the Tindeq, so the pull stays centred under one foot.
 //
@@ -33,14 +34,21 @@ export const ADDON_DIM = {
   // at the bottom). Head and nut sit in pockets open to the outside and the bed; wall = printed
   // material each side of the cut that the bolt clamps.
   joint: { z: 6, pocketW: 9.5, pocketH: 12, wall: 10, headPocket: 38, nutPocket: 12, bolt: 30 },
-  palm: { root: 52, top: 18, arc: 7, notch: 10 }, // solid rest: base, top, rounding; notch = cord slot for leg push
+  palm: { root: 52, top: 18, arc: 7, hole: 14, drop: 4 }, // solid rest: base, top, rounding. hole = leg-push cord
+  // tunnel (closed: the cord can't lift out), its centre `drop` below the cord line so the cord rides its roof on the line
+  strap: { w: 27, h: 4.5, z: 14, edge: 3 }, // leg push: slots for a 25 mm strap over the feet (rowing-machine style)
+  legAngle: 45, // leg push: design angle of the cord up to your hands (strength screen)
+  legLift: 150, // preview only: hands this far above the cord line
   travel: 50, // the cord length sets where the gripper sits: 0-50 mm from the palm rest
   legReach: 260, // preview only: leg push, gripper this far in front of the rest (in your hands)
   cordGap: 14, // gripper top (at its furthest) to the Tindeq: room for the knot
   maxPiece: 236, // longest printed piece (A1 bed is 256 mm)
   tindeq: { floor: 6, guideH: 14, guideT: 4, clear: 4, clip: 34 }, // clip = carabiner / short cord to the wall
-  wall: { t: 20, window: 16, over: 14, buttress: 15 }, // anchor wall: carabiner/cord window + bridge above it
-  spring: { carriage: 18, preload: 1, cordHole: 12, post: 10, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
+  wall: { t: 20, window: 24, over: 14, buttress: 15 }, // anchor wall: carabiner / both cord strands window + bridge above it
+  // carriage cord: a loop through two holes and round a groove on the back (a U, no knot on the
+  // carriage). uDy = hole offset from the cord line, uR = hole radius, loopReach = the loop's
+  // end (where the gripper cord or the Tindeq clips on) in front of the wall.
+  spring: { carriage: 18, preload: 1, uDy: 10, uR: 3.75, groove: 3.4, loopReach: 40, post: 10, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
   foot: { len: 230, width: 160, t: 11, lugL: 70, lugT: 20, holeD: 14, holeZ: 26, over: 18, apex: 250, footW: 110 },
 };
 
@@ -158,6 +166,15 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   R.xW0 = R.xT0 + TINDEQ.length + T.clip;
   R.xW1 = R.xW0 + A.wall.t;
   R.window = { y: Yc, z: Zc, r: A.wall.window / 2 };
+  // leg push: closed cord tunnel low in the rest + strap slots each side of it
+  const P = A.palm, slope = (z) => (z * (P.root - P.top)) / (R.Zp - P.arc); // x of the rest's front face at height z
+  const hz = Zc - P.drop, hr = P.hole / 2;
+  R.legHole = { z: hz, r: hr, xMouth: slope(hz + hr), roof: round1(R.Zp - P.arc / 2 - (hz + hr * Math.SQRT2)) };
+  R.legHole.len = P.root - R.legHole.xMouth;
+  const St = A.strap;
+  R.strap = { y: [inner - St.edge - St.w, inner - St.edge], z: [St.z, St.z + St.h], xFront: slope(St.z + St.h) };
+  if (R.strap.z[1] > hz - hr - 3) R.problems.push("No room for the strap slots under the leg-push cord hole.");
+  if (R.legHole.roof < 6) R.problems.push("The palm rest is too low over the leg-push cord hole.");
 
   // spring section: always a 2 x 2 block of seats round the window, so the same print takes
   // 2 or 4 springs. 2 springs go on a diagonal: the load still pulls through the centre.
@@ -170,6 +187,9 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   R.xC0 = R.xW1 + R.spring.rest;
   R.xC1 = R.xC0 + S.carriage;
   R.xEnd = R.xC1 + S.post + 3;
+  R.uY = [Yc - S.uDy, Yc + S.uDy];
+  // where the loop's end sits at rest: in front of the wall (springs), at the Tindeq's far eye (both)
+  R.loopEnd = { springs: R.xW0 - S.loopReach, both: R.xT0 + TINDEQ.length / 2 + TINDEQ.eyePitch / 2 };
   // posts sit outside the springs (1.5 mm clear), inside the carriage's footprint
   R.carriageY = [Math.min(...ys) - m.OD / 2 - 1.5 - S.post, Math.max(...ys) + m.OD / 2 + 1.5 + S.post];
   const zs = pos.map((q) => q.z);
@@ -261,7 +281,28 @@ function screenRig(R) {
   add("joint bolt pull (each)", C - F / 2, ALLOW.boltN, "N");
   add("joint top (compression)", (2 * C) / (w * c), ALLOW.compression);
   const b = 2 * R.outer;
-  add("palm rest root", (6 * F * R.Zp) / ((b - A.palm.notch) * A.palm.root ** 2), ALLOW.acrossLayer);
+  add("palm rest root", (6 * F * R.Zp) / ((b - A.palm.hole) * A.palm.root ** 2), ALLOW.acrossLayer);
+  // leg push: the cord rises to your hands and presses up on the tunnel roof. Roof = a beam
+  // across the hole, as long as the tunnel, thickness at the middle of the rounded top.
+  {
+    const H = R.legHole, up = F * Math.sin((A.legAngle * Math.PI) / 180);
+    add("leg-push hole roof (bending)", (6 * ((up * 2 * H.r) / 4)) / (H.len * H.roof ** 2), ALLOW.inLayer);
+    add("leg-push hole roof (layer shear)", (1.5 * (up / 2)) / (H.len * H.roof), ALLOW.acrossLayer);
+  }
+  // carriage: the cord loop pulls the web between its two holes forward, a beam over the
+  // holes; the carriage prints standing, so this bends along the layers
+  {
+    // web = the strip between the two holes; it spans the hole height (top and bottom are the
+    // full carriage). The carriage prints standing (layers across the pull), so its shear runs
+    // across the layers: the tightest item, kept under the across-layer limit.
+    const S = A.spring, web = 2 * (S.uDy - S.uR), d = S.carriage - S.groove, span = 2 * S.uR;
+    add("carriage web between the cord holes (bending)", (6 * ((F * span) / 8)) / (web * d ** 2), ALLOW.inLayer);
+    add("carriage web (layer shear)", (1.5 * (F / 2)) / (web * d), ALLOW.acrossLayer);
+    add("carriage web (cord pressing on it)", F / (web * 6), ALLOW.compression);
+    // whole carriage: pulled in the middle, held by the springs out to each side
+    const arm = Math.abs(R.spring.ys[1] - R.Yc), hC = R.carriageZ[1] - R.carriageZ[0];
+    add("carriage bending between the springs", ((F / 2) * arm) / ((hC * d ** 2) / 6), ALLOW.inLayer);
+  }
   const t = A.wall.t + A.wall.buttress;
   add("anchor wall root", (6 * F * R.Zc) / (b * t * t), ALLOW.acrossLayer);
   add("bridge over the window", (6 * ((F * A.wall.window) / 8)) / (A.wall.over * A.wall.t ** 2), ALLOW.inLayer);
@@ -327,9 +368,13 @@ export function buildRig(r, R) {
   }
 
   const tools = [];
-  // leg-push cord notch through the palm rest, round-bottomed at the cord line
-  tools.push(box(r, -1, P.root + 1, R.Yc - P.notch / 2, R.Yc + P.notch / 2, R.Zc, zT + 1));
-  tools.push(r.makeCylinder(P.notch / 2, P.root + 2, [-1, R.Yc, R.Zc], [1, 0, 0]));
+  // leg-push cord tunnel through the palm rest (closed: the cord can't lift out of it), with a
+  // 45° flared mouth on the front so the cord bends round a smooth edge, not a sharp one
+  const H = R.legHole;
+  tools.push(prismX(teardrop(r, R.Yc, H.z, H.r), -1, P.root + 1));
+  tools.push(coneX(r, H.xMouth - 2, H.r + 8, H.xMouth + 6, H.r, R.Yc, H.z));
+  // strap slots, one each side, front face to back face
+  for (const k of [-1, 1]) tools.push(box(r, -1, P.root + 1, k > 0 ? R.strap.y[0] : -R.strap.y[1], k > 0 ? R.strap.y[1] : -R.strap.y[0], R.strap.z[0], R.strap.z[1]));
   tools.push(prismX(teardrop(r, R.window.y, R.window.z, R.window.r), R.xW0 - 1, R.xW1 + 1));
   for (const { y, z } of sp.pos) {
     tools.push(prismX(teardrop(r, y, z, S.rodHole), R.xW0 - 1, R.xW1 + 1));
@@ -360,10 +405,43 @@ export function buildRig(r, R) {
   return parts;
 }
 
+/** Cord between two points (a straight rod, r 2.5), for the preview and the checks. */
+export function cordSeg(r, a, b, rad = 2.5) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], n = Math.hypot(...d);
+  return r.makeCylinder(rad, n, a, d.map((v) => v / n));
+}
+
+/** The carriage loop: from its end (where the gripper cord or the Tindeq clips) out through the
+ *  wall window, into one carriage hole, round the groove on the back and out the other: a U.
+ *  `dx` moves the carriage end toward the wall (spring squeeze). Returns cord solids. */
+export function loopCord(r, R, load, dx = 0, rad = 2.5) {
+  const xL = R.loopEnd[load] - dx, x0 = R.xC0 - dx, x1 = R.xC1 - dx, z = R.Zc;
+  const out = [];
+  for (const y of R.uY) {
+    out.push(cordSeg(r, [xL, R.Yc, z], [x0, y, z], rad));
+    out.push(cordSeg(r, [x0, y, z], [x1 + 0.5, y, z], rad));
+  }
+  out.push(cordSeg(r, [x1 + 0.5, R.uY[0] - rad, z], [x1 + 0.5, R.uY[1] + rad, z], rad));
+  return out;
+}
+
+/** Solid cone along X from radius r0 at x0 to r1 at x1, on the line (y, z). */
+function coneX(r, x0, r0, x1, r1, y, z) {
+  const d = r.draw([x0, 0]).lineTo([x0, r0]).lineTo([x1, r1]).lineTo([x1, 0]).close();
+  return d.sketchOnPlane("XY").revolve([1, 0, 0], { origin: [0, 0, 0] }).translate([0, y, z]);
+}
+
 function buildCarriage(r, R) {
   const S = ADDON_DIM.spring, sp = R.spring;
   let c = box(r, R.xC0, R.xC1, R.carriageY[0], R.carriageY[1], R.carriageZ[0], R.carriageZ[1]);
-  c = c.cut(r.makeCylinder(S.cordHole / 2, S.carriage + 2, [R.xC0 - 1, R.Yc, R.Zc], [1, 0, 0]));
+  // cord loop: in one hole, round the groove on the back, out the other (a U, no knot here).
+  // Flared both ends so the cord never bends round a sharp edge.
+  for (const y of R.uY) {
+    c = c.cut(r.makeCylinder(S.uR, S.carriage + 2, [R.xC0 - 1, y, R.Zc], [1, 0, 0]));
+    c = c.cut(coneX(r, R.xC0 - 0.5, S.uR + 1.5, R.xC0 + 1, S.uR, y, R.Zc));
+    c = c.cut(coneX(r, R.xC1 - 3, S.uR, R.xC1 + 0.5, S.uR + 3.5, y, R.Zc));
+  }
+  c = c.cut(r.makeCylinder(S.groove, R.uY[1] - R.uY[0], [R.xC1, R.uY[0], R.Zc], [0, 1, 0]));
   for (const { y, z } of sp.pos) {
     c = c.cut(r.makeCylinder(S.rodHole, S.carriage + 2, [R.xC0 - 1, y, z], [1, 0, 0]));
     c = c.cut(r.makeCylinder(sp.OD / 2 + 0.6, S.seat + 0.5, [R.xC0 - 0.5, y, z], [1, 0, 0]));

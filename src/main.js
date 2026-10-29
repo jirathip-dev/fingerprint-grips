@@ -56,7 +56,7 @@ const LOAD_TXT = {
 };
 const BRACE_TXT = {
   palm: "Platform on a table: heel of your hand on the rounded rest, fingers hooked in the gripper.",
-  legs: "Platform on the floor, sitting: soles of your feet against the front of the rest, cord through the slot in it to the gripper in your hands. Nothing to change on the parts.",
+  legs: "Platform on the floor, sitting: soles of your feet against the front of the rest, a strap over your feet through the two slots in the rest, cord out of the hole low in the rest to the gripper in your hands. The strap keeps the front down. Same printed parts.",
 };
 
 function readForm() {
@@ -236,7 +236,7 @@ function addonSummary(a) {
         `<li>Same print takes 2 or 4 springs (about ${kg(s.kg2)} or ${kg(s.kg4)} kg); one rail is marked for each. Wind the nuts behind the carriage in to pre-tension: harder from the start, same top load, marks stay right.</li>`;
     }
     html += a.brace === "legs"
-      ? `<li>Leg push: feet flat on the front of the rest, cord through its ${a.notch} mm slot. Platform flat on the floor.</li>`
+      ? `<li>Leg push: feet on the front of the rest, held by a ${a.strapW} mm strap through the slots in the rest. Cord out of the ${a.legHole} mm hole low in the rest. Platform flat on the floor.</li>`
       : `<li>Palm rest top ${a.palmHeight} mm high, lined up with your finger channel. Set the gap by cord length (0–${a.travel} mm).</li>`;
     html += `<li>Print once, use every way: Tindeq, springs or both, palm or legs.</li>`;
   }
@@ -336,7 +336,7 @@ Hardware
   Spring use: 2 or 4 x compression spring, wire ${s.wire} mm, OD ${s.od} mm, free length ${s.length} mm
               (all the same size)
               1 x M5 x ${a.guideBolt} mm bolt per spring, 2 washers + 2 nuts each (spring guides)
-              About 60 cm of 5-6 mm cord
+              About 1 m of 5-6 mm cord (the carriage loop), 1 carabiner (gripper cord to the loop)
   Every bolt is a stock shop length: nothing to cut.
 
 Assembly
@@ -351,16 +351,23 @@ Assembly
 Load: pick one, no reprint
   Tindeq only     cord from the gripper to the Tindeq's near eye; carabiner from its far eye
                   through the wall window, round the bridge above it.
-  Springs only    cord from the gripper through the wall window and the carriage, knot behind it.
-  Tindeq+springs  gripper -> Tindeq near eye; far eye -> short cord through the window and the
-                  carriage, knot behind it. The springs give the resistance, the Tindeq reads it.
+  Springs only    the carriage loop (below) comes out of the wall window; clip the gripper
+                  cord to it with a carabiner.
+  Tindeq+springs  gripper -> Tindeq near eye; far eye -> the carriage loop. The springs give the
+                  resistance, the Tindeq reads it.
+  Carriage loop   no knot on the carriage. Tie a loop of cord (double fisherman's). Push one end
+                  of the loop through the wall window, through one carriage hole, round the groove
+                  on the back and back out of the other hole and the window: a U round the carriage.
+                  Adjust where the knot sits so it stays in front of the wall, never in a hole.
   The Tindeq should hang clear of the floor and the side guides when you pull. Tare it unloaded.
 
 Brace: pick one
   Palm push   platform on a table. Heel of your hand on the rounded rest, fingers in the gripper.
   Leg push    platform flat on the floor, sitting. Soles of your feet on the front of the rest,
-              cord out through the slot in the rest to the gripper in your hands. Keep the pull
-              level with the platform; don't lift the far end.
+              strap (25 mm webbing or a luggage strap) through the two slots, tight over your
+              feet. Feed the gripper cord out of the hole low in the rest. Your hands are higher
+              than the rest, so the cord pulls up: the strap and your feet hold the front down.
+              Pull toward your belly, not up at your chin.
 
 Springs
   About ${kg(s.totalKg)} kg at full squeeze over ${s.travel} mm (${s.kgPerMm} kg per mm) with ${s.count} springs.
