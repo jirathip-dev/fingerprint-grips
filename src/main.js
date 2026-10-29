@@ -64,10 +64,15 @@ function readForm() {
   for (const name of FINGERS) hand[name] = Object.fromEntries(KEYS.map((k) => [k, Number(form.elements[`${name}.${k}`].value)]));
   const spring = Object.fromEntries(Object.keys(SPRING_FIELDS).map((k) => [k, Number(form.elements[`spring.${k}`].value)]));
   spring.count = Number(form.elements.springCount.value);
-  return { hand, side: form.elements.side.value, device: form.elements.device.value, addon: form.elements.addon.value, load: form.elements.load.value, brace: form.elements.brace.value, spring };
+  return { hand, side: form.elements.side.value, axle: form.elements.axle.value, device: form.elements.device.value, addon: form.elements.addon.value, load: form.elements.load.value, brace: form.elements.brace.value, spring };
 }
 const kg = (v) => (v >= 10 ? Math.round(v) : v.toFixed(1));
+const AXLE_TXT = {
+  pin: "Rollers spin on smooth steel dowel pins. Best: no wear. Mostly sold online in packs.",
+  bolt: "Rollers spin on M3 countersunk bolts, sold almost everywhere. The thread slowly wears the roller hole; a worn roller is a 5-minute reprint. Slots may be up to 3 mm wider to suit stock bolt lengths.",
+};
 function showBlurb() {
+  document.querySelector("#axle-blurb").textContent = AXLE_TXT[form.elements.axle.value];
   blurbEl.textContent = DEVICES[form.elements.device.value].blurb;
   const addon = form.elements.addon.value;
   document.querySelector("#addon-blurb").textContent = ADDONS[addon];
@@ -211,7 +216,7 @@ function showSummary(info, ms) {
     `<p><strong>${DEVICES[info.device].label}, ${info.side} hand</strong> · ${info.width.toFixed(0)} × ${info.depth.toFixed(0)} × ${info.height.toFixed(0)} mm · built in ${ms} ms</p>` +
     `<ul>${order.map((s) => slotLine(info, s)).join("")}</ul>` +
     `<p>All rollers are spools: raised rims, waist that centres the finger. Fingers go in from below, in front of the rollers.</p>` +
-    `<p>Cord goes in and out through two ${info.cord.diameter} mm holes in the top, ${info.cord.spread} mm apart and dead centre. Hardware: 4 × 3 mm steel pins, ${info.hardware.rods} × M4 threaded rod ${info.hardware.rodLength} mm.</p>` +
+    `<p>Cord goes in and out through two ${info.cord.diameter} mm holes in the top, ${info.cord.spread} mm apart and dead centre. Hardware: 4 × ${info.hardware.axle === "bolt" ? "M3 countersunk bolts" : "3 mm dowel pins"} and ${info.hardware.rods} × M5 × ${info.hardware.boltLength} mm bolts, all shop lengths: nothing to cut.</p>` +
     (info.addon ? addonSummary(info.addon) : "") +
     partsHtml(partsFor(info));
 }
@@ -326,20 +331,22 @@ Use
 PLATFORM (TINDEQ / SPRINGS / BOTH, PALM OR LEG PUSH)
 ${common}
 Hardware
-  2 x M4 threaded rod, ${a.rodLength} mm, with nuts + washers (clamps the parts together along the rails)
+  ${2 * a.joints} x M5 x 30 mm bolt, washer + nut (joins the parts: one per rail at each joint)
   Tindeq use: 1 carabiner (or a short loop of cord) from the Tindeq's far eye round the wall bridge
   Spring use: 2 or 4 x compression spring, wire ${s.wire} mm, OD ${s.od} mm, free length ${s.length} mm
-              (any shop, e.g. a mixed compression-spring box; all the same size)
-              1 x M4 threaded rod per spring, ${s.guideLength} mm, 3 nuts each (spring guides;
-              cut from a 1 m M4 threaded rod with a hacksaw)
+              (all the same size)
+              1 x M5 x ${a.guideBolt} mm bolt per spring, 2 washers + 2 nuts each (spring guides)
               About 60 cm of 5-6 mm cord
+  Every bolt is a stock shop length: nothing to cut.
 
 Assembly
-  1. Butt the parts together, push the two long rods through the rails, tighten the nuts.
+  1. Butt the parts together. At each joint, put a bolt through the hole low in each rail,
+     head in the pocket on one side, washer + nut in the pocket on the other. Tighten firmly.
   2. Lay the gripper on its back on the two ledges, finger side toward the rest.
-  3. Springs (if used): fix a guide rod in a spring hole of the wall with a nut each side,
-     slide on the spring, then the carriage, then a nut behind it. 4 springs: all four holes.
-     2 springs: two opposite corners (top-left + bottom-right), so the pull stays centred.
+  3. Springs (if used): push a guide bolt through a spring hole of the wall from the Tindeq
+     side, with a nut on the far side to lock it to the wall. Slide on the spring, then the
+     carriage, then washer + nut behind it. 4 springs: all four holes. 2 springs: two opposite
+     corners (top-left + bottom-right), so the pull stays centred.
 
 Load: pick one, no reprint
   Tindeq only     cord from the gripper to the Tindeq's near eye; carabiner from its far eye
@@ -364,7 +371,7 @@ Springs
   with ${s.count}); the 10 kg marks are wider.
 
   Pre-tension (adjust): with the nuts behind the carriage at the end posts the springs are just
-  touching. Wind every nut in by the same number of turns (M4: 0.7 mm per turn) to pre-squeeze
+  touching. Wind every nut in by the same number of turns (M5: 0.8 mm per turn) to pre-squeeze
   them: the pull starts harder and reaches full squeeze sooner. The top load is the same (the
   stops decide it) and the marks still read right, because they go by carriage position.
   Calculated from the spring sizes; cheap springs vary about 20%. Check once with the Tindeq
@@ -390,18 +397,24 @@ Print (Bambu Studio)
   Walls      5 loops, infill 40% gyroid or cubic
   Supports   none needed: every part already lies flat on the plate
 
-Hardware
-  4 x 3 mm steel pins (cut from 3 mm rod, or nails with the head cut off):
+Hardware (all stock shop lengths: nothing to cut)
+${info.hardware.axle === "bolt" ? "  4 x M3 countersunk bolts (flat head, ISO 10642 / DIN 7991), the roller axles:" : "  4 x 3 mm steel dowel pins (the roller axles):"}
 ${pins}
-  ${info.hardware.rods} x M4 threaded rod, ${info.hardware.rodLength} mm, with 2 nuts + washers each
+  ${info.hardware.rods} x M5 x ${info.hardware.boltLength} mm bolt (socket head), with a washer each end + a nut
   About 60 cm of 5-6 mm accessory cord
 
 Assembly
-  1. Slide each pin through its roller.
+${info.hardware.axle === "bolt" ? `  1. Each roller's bolt goes in from the wall with the cone-shaped hole: push it through
+     that wall, through the roller, and into the small hole in the next wall. No nut.
+  2. Stack slice 1 (pinky) .. slice 4 (index) and the end plate in order, fitting each
+     roller + bolt as you go. The head sits flat in its cone; the next slice covers it.` : `  1. Slide each pin through its roller.
   2. Stack slice 1 (pinky) .. slice 4 (index) and the end plate in order,
-     dropping each roller + pin into the blind holes as you go.
-  3. Push the rods through and tighten the nuts until the slices are snug.
+     dropping each roller + pin into the blind holes as you go.`}
+  3. Push the bolts through and tighten the nuts until the slices are snug.
      Every roller must still spin freely.
+     How the ${info.hardware.axle === "bolt" ? "roller bolts" : "pins"} stay put: ${info.hardware.axle === "bolt" ? "the head sits in its cone and the tip in a blind hole" : "each pin end sits in a blind hole (it doesn't go through)"} in the
+     walls either side. Once the M5 bolts clamp the slices, they're trapped: no glue, and
+     they come out again if you take it apart.
   4. Feed the cord down one top hole, along the tunnel inside the top block and up the
      other hole (${info.cord.diameter} mm holes, ${info.cord.spread} mm apart). Tie it into a loop
      and clip the loop to your Tindeq / carabiner. Let the knot sit off-centre so the

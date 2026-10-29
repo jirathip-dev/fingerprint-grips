@@ -19,7 +19,7 @@ This is an independent hobby project, not affiliated with or endorsed by The Han
 |---|---|---|
 | Grip | claw: tip hooks over the roller, end joint bent | fingers drape over the roller |
 | Roller | 19 mm (pinky 30 mm) | diameter = middle segment (16–40 mm) |
-| Stops | roof over the end joint; pad half on the roller, half on a ledge behind it; **closed back** (finger can't go through) | V-peaked roof ≥ one roller radius above; **open back** (tips pass through) |
+| Stops | roof over the end joint; curved back that follows the roller up to its middle, with a shelf there; **closed back** (finger can't go through) | V-peaked roof ≥ one roller radius above; **open back** (tips pass through) |
 | Per-finger offsets | up = length − pinky length, in = middle seg − pinky's, roof gap = tip / tan(angle) | up = length − pinky length |
 
 Both: every roller is a spool (raised rims both ends, concave waist that centres
@@ -32,18 +32,20 @@ external loop to snap.
 
 ## Parts to buy
 
-The app lists exactly what your build needs (sizes and lengths), with example shop searches for [Lazada TH](https://www.lazada.co.th) and [AliExpress](https://www.aliexpress.com). The same list goes in the zip's README. They're searches, not product links: check the size on the listing.
+The app lists exactly what your build needs, in stock shop sizes, so nothing needs cutting. Each part comes with an example search. The same list goes in the zip's README.
 
-| Part | Example search (Lazada TH) | Notes |
+| Part | Example search | Notes |
 |---|---|---|
-| 3 mm steel rod (roller pins) | [เพลาสแตนเลส 3 มม](https://www.lazada.co.th/catalog/?q=%E0%B9%80%E0%B8%9E%E0%B8%A5%E0%B8%B2%E0%B8%AA%E0%B9%81%E0%B8%95%E0%B8%99%E0%B9%80%E0%B8%A5%E0%B8%AA%203%20%E0%B8%A1%E0%B8%A1) | cut to the lengths in the app |
-| M4 threaded rod | [สตัด เกลียวตลอด M4](https://www.lazada.co.th/catalog/?q=%E0%B8%AA%E0%B8%95%E0%B8%B1%E0%B8%94%20%E0%B9%80%E0%B8%81%E0%B8%A5%E0%B8%B5%E0%B8%A2%E0%B8%A7%E0%B8%95%E0%B8%A5%E0%B8%AD%E0%B8%94%20M4) | 1 m, cut with a hacksaw |
-| M4 nuts + washers | [น็อตตัวเมีย M4 สแตนเลส](https://www.lazada.co.th/catalog/?q=%E0%B8%99%E0%B9%87%E0%B8%AD%E0%B8%95%E0%B8%95%E0%B8%B1%E0%B8%A7%E0%B9%80%E0%B8%A1%E0%B8%B5%E0%B8%A2%20M4%20%E0%B8%AA%E0%B9%81%E0%B8%95%E0%B8%99%E0%B9%80%E0%B8%A5%E0%B8%AA) | |
-| 5–6 mm cord | [เชือก prusik 6 มม](https://www.lazada.co.th/catalog/?q=%E0%B9%80%E0%B8%8A%E0%B8%B7%E0%B8%AD%E0%B8%81%20prusik%206%20%E0%B8%A1%E0%B8%A1) | climbing accessory cord is best |
-| Compression springs | [สปริงกด ลวด 2 มิล วงนอก 16](https://www.lazada.co.th/catalog/?q=%E0%B8%AA%E0%B8%9B%E0%B8%A3%E0%B8%B4%E0%B8%87%E0%B8%81%E0%B8%94%20%E0%B8%A5%E0%B8%A7%E0%B8%94%202%20%E0%B8%A1%E0%B8%B4%E0%B8%A5%20%E0%B8%A7%E0%B8%87%E0%B8%99%E0%B8%AD%E0%B8%81%2016) | platform only; the app makes the search from your spring size |
-| Climbing carabiner | [คาราบิเนอร์ ปีนเขา kN](https://www.lazada.co.th/catalog/?q=%E0%B8%84%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%9A%E0%B8%B4%E0%B9%80%E0%B8%99%E0%B8%AD%E0%B8%A3%E0%B9%8C%20%E0%B8%9B%E0%B8%B5%E0%B8%99%E0%B9%80%E0%B8%82%E0%B8%B2%20kN) | Tindeq use; look for a kN rating |
+| 3 mm steel dowel pins (roller axles) | `3mm dowel pin stainless` | 4 pins; the app picks a standard length per finger. Some shops write “M3” for the diameter |
+| or M3 countersunk bolts (roller axles) | `M3 countersunk bolt assortment` | pick **M3 bolt** in the app: easier to find; the thread slowly wears the roller hole (cheap reprint) |
+| M5 socket-head bolts + nuts + washers | `M5 x 130 socket head bolt` | gripper clamp (length from the app); M5 × 30 joins the platform parts |
+| 5–6 mm cord | `6mm accessory cord climbing` | climbing accessory cord is best |
+| Compression springs | `compression spring 2mm wire 16mm OD 50mm` | platform only; the app makes the search from your spring size |
+| Climbing carabiner | `climbing carabiner kN rated` | Tindeq use; look for a kN rating |
 
 Not endorsements, no affiliate links. Any hardware or climbing shop works too.
+
+**How the pins stay in:** each roller spins on a 3 mm steel dowel pin (or an M3 countersunk bolt, head flush in one wall). The pin ends sit in blind holes (they don't go through) in the walls either side, and the M5 bolts clamp the slices together, so the pins are trapped. No glue, and they come out again if you take it apart.
 
 **Spring load:** the platform always has seats for 4 springs. Fit 2 (opposite corners) or 4 without reprinting; one rail is marked for 2 springs, the other for 4. For a harder start, wind the nuts behind the carriage in to pre-tension the springs. The top load stays the same (the stops set it) and the marks still read right.
 
@@ -64,7 +66,7 @@ Pick one under **Add-on**. It's sized around the gripper you configured and goes
 | Palm | platform on a table, heel of the hand on the rounded rest |
 | Legs | platform on the floor, sitting, soles against the front of the rest, cord through the slot in it |
 
-Buy: 2 × M4 threaded rod + nuts; for springs, 2–4 compression springs (any shop size: enter wire / OD / length / coils) and 2–4 short M4 rods as spring guides; a carabiner for the Tindeq.
+Buy: M5 × 30 bolts to join the parts; for springs, 2–4 compression springs (any shop size: enter wire / OD / length / coils) and one M5 guide bolt per spring; a carabiner for the Tindeq. All stock lengths.
 
 **Foot plate** (one foot). A lug each side of your foot (120 mm between them); a cord from each lug meets the other at the Tindeq's lower eye at least 250 mm up, so the pull stays centred under one foot. Hang the gripper from the Tindeq's top eye and pull up.
 
@@ -143,7 +145,7 @@ scripts/check.mjs   geometry gate
 
 A zip named `fingerprint-grips-<fdp|fds>-<side>[-<addon>].zip`: add-on parts in `print/addon/`; `print/slice_1..5_*.stl` (frame slices, already lying flat), `print/roller_<finger>.stl` × 4,
 `assembled.step`, `measurements.json`, `PRINT-ME.txt` (Bambu Studio settings,
-hardware list with pin and rod lengths, assembly, safety).
+hardware list with pin and bolt lengths, assembly, safety).
 
 ## Licence
 

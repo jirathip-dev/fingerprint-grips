@@ -18,7 +18,8 @@
 // Construction (as in Open Grips): one printed slice per finger, stacked along X.
 // Each slice = a divider wall + the solid that shapes that finger's slot
 // (roof / blocker / ledge). Each roller spins on its own 3 mm steel pin held in
-// blind holes in the two walls beside it. Three M4 threaded rods clamp the stack.
+// blind holes in the two walls beside it. Three M5 bolts clamp the stack. Pins and bolts are
+// shop lengths (nothing to cut): pick the pin length, and widen the slot a little if needed.
 // The cord goes down into the top block near one end, along a tunnel, and back out near
 // the other end (holes about 2/3 of the width apart, as on the HoG Micro). The two holes
 // sit dead centre, the same distance from both ends; the wide stance stops it rolling.
@@ -51,6 +52,39 @@ export const DEFAULT_HAND = {
   pinky: { length: 60, pipDip: 18.5, dipTip: 21, tipWidth: 15 },
 };
 
+// Shop lengths. Dowel pins (3 mm, DIN 6325 / ISO 8734) and M5 socket-head bolts (ISO 4762).
+export const PIN_LENGTHS = [8, 10, 12, 14, 16, 18, 20, 22, 24, 25, 26, 28, 30, 32, 35, 36, 40, 45, 50];
+export const BOLT_LENGTHS = [60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200];
+export const PIN_ENGAGE = 1.5; // shoved fully to one side, the far end still sits this deep
+export const BOLT_SPARE = 8; // bolt beyond the frame: 2 washers + nut + a thread showing
+/** Pin for a slot of width w: the longest shop pin that fits the two blind holes, and the
+ *  slot width to use (widened just enough when no shop pin gives >= PIN_ENGAGE each side). */
+export function pinFor(w, depth) {
+  const fit = (L, ww) => L <= ww + 2 * depth - 0.5 && L - ww - depth >= PIN_ENGAGE;
+  const L = [...PIN_LENGTHS].reverse().find((n) => fit(n, w));
+  if (L) return { length: L, w };
+  const L2 = PIN_LENGTHS.find((n) => n - 2 * depth + 0.5 >= w);
+  return { length: L2, w: round1(L2 - 2 * depth + 0.5) };
+}
+export const boltFor = (width) => BOLT_LENGTHS.find((n) => n >= width + BOLT_SPARE) ?? null;
+
+// Roller axle option B: M3 countersunk bolt (ISO 10642 / DIN 7991). Length includes the head.
+// The head sits flush in a cone in one wall, the tip in a blind hole in the other; the clamp
+// bolts trap it, like the pin. Rollers turn on the thread: a little wear on the roller bore.
+export const AXLES = ["pin", "bolt"];
+export const CS_LENGTHS = [8, 10, 12, 14, 16, 18, 20, 25, 30, 35, 40];
+export const CS = { head: 1.86, coneR: 3.4, tip: [1.5, 3.3] }; // head height, cone radius at the face, tip depth range
+/** Countersunk M3 for a slot of width w: a stock length whose tip lands 1.5-3.3 mm into the far
+ *  wall, and the slot width to use (widened just enough when no stock length lands). */
+export function csBoltFor(w) {
+  const [lo, hi] = CS.tip;
+  const L = [...CS_LENGTHS].reverse().find((n) => n - CS.head - w >= lo && n - CS.head - w <= hi);
+  if (L) return { length: L, w, tip: round1(L - CS.head - w) };
+  const L2 = CS_LENGTHS.find((n) => n - CS.head - hi >= w);
+  const w2 = Math.ceil((L2 - CS.head - hi) * 10) / 10; // round up: the tip may only get shallower
+  return { length: L2, w: w2, tip: round1(L2 - CS.head - w2) };
+}
+
 export const DIM = {
   wall: 5, // divider wall
   slotExtra: 4, // slot width = fingertip width + this
@@ -59,7 +93,7 @@ export const DIM = {
   pinHoleR: 1.6, // blind hole for the 3 mm steel pin
   pinDepth: 3.5, // blind hole depth into each wall (5 mm wall leaves 1.5 mm skin)
   boreR: 1.75, // roller bore, spins on the pin
-  rodR: 2.2, // M4 threaded rod
+  rodR: 2.75, // M5 clamp bolt (5.5 mm clearance hole)
   cordHalf: 3.5, // tunnel half-width -> 7 mm, for 5-6 mm accessory cord
   cordBend: 7, // tunnel centreline bend radius at the two corners
   cordSpread: 0.65, // hole spacing as a share of the frame width
@@ -78,7 +112,7 @@ export const DIM = {
     pinkyR: 15, // ... and 30 mm for the pinky
     angle: { index: 57, middle: 60, ring: 60, pinky: 55 }, // fork README "desired angles"
     spine: 10, // solid back behind the ledge: the finger can't go through
-    ledgeDepth: 6, // ledge BEHIND the roller: "quarter of the pad on the roller, quarter on the ledge"
+    ledgeDepth: 6, // flat shelf behind the roller, at axle height, up to the back wall
     ledgeGap: 0.8, // roller to ledge, and roller to the stem under it
     stem: 8, // solid under the lowest roller
   },
@@ -127,7 +161,7 @@ export function validate(hand) {
 }
 
 /** Every position and size, as plain numbers. Cheap; also drives the summary and the checks. */
-export function layout(device, hand) {
+export function layout(device, hand, axle = "pin") {
   const h = Object.fromEntries(FINGERS.map((n) => [n, Object.fromEntries(Object.keys(MEASURES).map((k) => [k, Number(hand[n][k])]))]));
   const P = h.pinky;
   const t = DIM.wall;
@@ -135,8 +169,10 @@ export function layout(device, hand) {
   let x = 0;
   const slots = FINGERS.map((name) => {
     const f = h[name];
-    const w = f.tipWidth + DIM.slotExtra + (name === "pinky" ? DIM.pinkyExtra : 0);
-    const s = { name, f, wallX: x, xs: x + t, w };
+    const want = f.tipWidth + DIM.slotExtra + (name === "pinky" ? DIM.pinkyExtra : 0);
+    const pin = axle === "bolt" ? csBoltFor(want) : pinFor(want, DIM.pinDepth);
+    const w = pin.w;
+    const s = { name, f, wallX: x, xs: x + t, w, pinLength: pin.length, tip: pin.tip };
     x += t + w;
     return s;
   });
@@ -154,7 +190,7 @@ export function layout(device, hand) {
       s.gap = s.f.dipTip / Math.tan(D.angle[s.name] * RAD); // fork: roof height = tip / tan(angle)
       s.zCavTop = s.zTop + s.gap; // roof underside
       s.dip = rollerDip(s.r);
-      s.zLedge = s.zTop - s.dip; // ledge level with the roller waist, where the pad sits
+      s.zLedge = s.zc; // the back wraps the roller in a curve up to its middle (axle height), then a flat shelf
     }
     const ref = -Math.max(...slots.map((s) => s.depth + 2 * s.r + D.ledgeGap + D.ledgeDepth + D.spine));
     for (const s of slots) {
@@ -187,6 +223,14 @@ export function layout(device, hand) {
     yF = yFront - D.frontMargin;
   }
 
+  // bolt axles: the head cone goes in the wall away from the closer neighbouring axle (the end
+  // walls have none), so a cone never meets the next slot's hole inside a shared wall
+  if (axle === "bolt")
+    slots.forEach((s, i) => {
+      const d = (o) => (o ? Math.hypot(o.yc - s.yc, o.zc - s.zc) : Infinity);
+      s.head = d(slots[i - 1]) >= d(slots[i + 1]) ? "lo" : "hi";
+    });
+
   const zBottom =
     device === "fds"
       ? Math.min(...slots.map((s) => s.zFloor)) - DIM.fds.rail
@@ -206,9 +250,8 @@ export function layout(device, hand) {
   const cord = { x: cx, xa: cx - spread / 2, xb: cx + spread / 2, spread, y: yF / 2, bend: DIM.cordBend, half: DIM.cordHalf };
   cord.zh = zTop - 16; // centreline of the run along the top block
   cord.bottom = cord.zh - cord.half;
-  for (const s of slots) s.pinLength = round1(s.w + 2 * DIM.pinDepth - 0.5);
 
-  return { device, slots, width, endX, yF, zBottom, zTop, maxCav, rods, cord };
+  return { device, axle, slots, width, endX, yF, zBottom, zTop, maxCav, rods, cord };
 }
 
 /**
@@ -218,8 +261,8 @@ export function layout(device, hand) {
  * Z up) +X is on your right, so the unmirrored layout has the pinky on your left:
  * that is a LEFT hand (palm toward the gripper, fingers up). The right hand is the mirror.
  */
-export function buildGripper(r, hand, { device = "fdp", side = "right" } = {}) {
-  const L = layout(device, hand);
+export function buildGripper(r, hand, { device = "fdp", side = "right", axle = "pin" } = {}) {
+  const L = layout(device, hand, axle);
   const t = DIM.wall;
 
   const rect = (y0, y1, z0, z1) => r.drawRectangle(y1 - y0, z1 - z0).translate([(y0 + y1) / 2, (z0 + z1) / 2]);
@@ -232,11 +275,11 @@ export function buildGripper(r, hand, { device = "fdp", side = "right" } = {}) {
       const D = DIM.fdp;
       // front: open from below up to the roof, so the finger can come up in front of the roller
       const front = rect(L.yF - 2, s.yc, L.zBottom - 2, s.zCavTop);
-      // roller pocket: down to just above the stem the roller sits over
-      const pocket = rect(s.yc - 0.5, s.yLedge, s.zc - s.r - D.ledgeGap, s.zCavTop);
-      // over the ledge, up to the back wall
-      const tip = rect(s.yLedge - 0.5, s.yCavBack, s.zLedge, s.zCavTop);
-      return front.fuse(pocket).fuse(tip);
+      // behind and under the roller: a curved cradle that follows the roller (small gap all round)
+      // up to its middle; above that, open back to the back wall over a flat shelf at axle height
+      const cradle = r.drawCircle(s.r + D.ledgeGap).translate([s.yc, s.zc]);
+      const above = rect(s.yc - 0.5, s.yCavBack, s.zLedge, s.zCavTop);
+      return front.fuse(cradle).fuse(above);
     }
     // open front to back (the fingertips go through), roof above,
     // open below in front of the roller (the finger comes up from there), rail under the back half
@@ -262,9 +305,7 @@ export function buildGripper(r, hand, { device = "fdp", side = "right" } = {}) {
   // cutting tools shared by every slice: cord tunnel, clamp rods, roller pin holes
   let tools = cordTunnel(r, L);
   for (const rod of L.rods) tools = tools.fuse(r.makeCylinder(DIM.rodR, L.width + 4, [-2, rod.y, rod.z], [1, 0, 0]));
-  for (const s of L.slots) {
-    tools = tools.fuse(r.makeCylinder(DIM.pinHoleR, s.w + 2 * DIM.pinDepth, [s.xs - DIM.pinDepth, s.yc, s.zc], [1, 0, 0]));
-  }
+  for (const s of L.slots) tools = tools.fuse(axleTool(r, L, s));
 
   const parts = [];
   L.slots.forEach((s, i) => {
@@ -280,6 +321,22 @@ export function buildGripper(r, hand, { device = "fdp", side = "right" } = {}) {
   let out = parts;
   if (mirrored(side)) out = parts.map((p) => ({ ...p, shape: p.shape.mirror("YZ", [L.width / 2, 0, 0]) }));
   return { parts: out, layout: L, info: summarize(L, side) };
+}
+
+/** Hole(s) for one roller axle. Pin: blind hole each side. Bolt: countersink cone in the head
+ *  wall, blind hole for the tip in the other. Exported so the checks can measure the gaps. */
+export function axleTool(r, L, s) {
+  if (L.axle !== "bolt") return r.makeCylinder(DIM.pinHoleR, s.w + 2 * DIM.pinDepth, [s.xs - DIM.pinDepth, s.yc, s.zc], [1, 0, 0]);
+  const lo = s.xs, hi = s.xs + s.w, deep = CS.head + 0.05; // head a hair below the face
+  const cone = (face, dir) => {
+    const x1 = face - dir * deep;
+    const pts = [[face + dir * 0.5, 0], [face + dir * 0.5, CS.coneR], [face, CS.coneR], [x1, CS.coneR - deep], [x1, 0]];
+    const d = pts.slice(1).reduce((p, q) => p.lineTo(q), r.draw(pts[0])).close();
+    return d.sketchOnPlane("XY").revolve([1, 0, 0], { origin: [0, 0, 0] }).translate([0, s.yc, s.zc]);
+  };
+  const tipHole = (face, dir) => r.makeCylinder(DIM.pinHoleR, s.tip + 0.3 + 0.5, [dir > 0 ? face - 0.5 : face - s.tip - 0.3, s.yc, s.zc], [1, 0, 0]);
+  const shank = r.makeCylinder(DIM.pinHoleR, s.w + 1, [lo - 0.5, s.yc, s.zc], [1, 0, 0]);
+  return s.head === "lo" ? shank.fuse(cone(lo, 1)).fuse(tipHole(hi, 1)) : shank.fuse(cone(hi, -1)).fuse(tipHole(lo, -1));
 }
 
 /** True for the hand whose parts are the mirror image of the layout (pinky at x = 0 is the left hand). */
@@ -350,9 +407,10 @@ function summarize(L, side) {
       pinLength: s.pinLength,
     })),
     hardware: {
+      axle: L.axle,
       pins: L.slots.map((s) => ({ name: s.name, length: s.pinLength })),
       rods: L.rods.length,
-      rodLength: Math.ceil(L.width + 14),
+      boltLength: boltFor(L.width),
     },
   };
 }

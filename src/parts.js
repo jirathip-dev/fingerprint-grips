@@ -1,34 +1,34 @@
-// What to buy, with example shop searches. Searches, not product links: listings come and go,
-// and anyone can check the size on the page. Lazada (Thailand) + AliExpress (anywhere).
-const lazada = (q) => `https://www.lazada.co.th/catalog/?q=${encodeURIComponent(q)}`;
-const ali = (q) => `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(q)}`;
+// What to buy, with an example web search for each. Search words, not product links: listings
+// come and go, and any shop that shows the size works.
+const search = (q) => `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(q)}`;
 
-/** One line to buy. th / en = search words for Lazada TH / AliExpress. */
-const item = (what, qty, note, th, en) => ({ what, qty, note, links: [{ shop: "Lazada TH", url: lazada(th), q: th }, { shop: "AliExpress", url: ali(en), q: en }] });
+/** One line to buy. q = example search words. */
+const item = (what, qty, note, q) => ({ what, qty, note, q, url: search(q) });
 
-/** Parts for the gripper + chosen add-on. `info` is the worker's summary. */
+/** Parts for the gripper + chosen add-on. `info` is the worker's summary. Stock sizes only. */
 export function partsFor(info) {
   const h = info.hardware;
   const pins = h.pins.map((p) => `${p.name} ${p.length}`).join(", ");
-  const rodTotal = h.rods * h.rodLength;
   const out = [
-    item("3 mm steel rod (roller pins)", `4 pins: ${pins} mm`, "Stainless round bar, cut with a hacksaw or rotary tool and file the ends. Nails with the head cut off also work.", "เพลาสแตนเลส 3 มม", "3mm stainless steel rod"),
-    item("M4 threaded rod", `${h.rods} × ${h.rodLength} mm`, "Buy 1 m and cut it; one rod does the gripper and an add-on.", "สตัด เกลียวตลอด M4", "M4 threaded rod 1m"),
-    item("M4 nuts + washers", "", "", "น็อตตัวเมีย M4 สแตนเลส", "M4 hex nut washer set"),
-    item("Cord, 5–6 mm", "about 1 m per gripper", "Climbing accessory cord (6 mm prusik cord, rated in kN) from a climbing shop is best. Plain braided rope holds a light load but stretches.", "เชือก prusik 6 มม", "6mm prusik accessory cord"),
+    h.axle === "bolt"
+      ? item("M3 countersunk bolts (roller axles)", `4: ${pins} mm`, "Flat (countersunk) head, hex socket, stainless. Often sold in mixed M3 boxes.", "M3 countersunk bolt assortment")
+      : item("3 mm steel dowel pins (roller axles)", `4: ${pins} mm`, "Stainless or hardened, 3 mm diameter. Often sold as packs of one length; some listings say “M3” for the diameter.", "3mm dowel pin stainless"),
+    item(`M5 × ${h.boltLength} mm bolts`, `${h.rods}, with a nut + 2 washers each`, "Socket head (Allen key), stainless or grade 8.8.", `M5 x ${h.boltLength} socket head bolt`),
+    item("Cord, 5–6 mm", "about 1 m per gripper", "Climbing accessory cord (6 mm prusik cord, rated in kN) from a climbing shop is best. Plain braided rope holds a light load but stretches.", "6mm accessory cord climbing"),
   ];
   const a = info.addon;
   if (a?.kind === "platform") {
-    const s = a.spring;
-    out[1].qty = `${h.rods} × ${h.rodLength} mm (gripper) + 2 × ${a.rodLength} mm (platform)` + (a.load !== "tindeq" ? ` + 1 per spring × ${s.guideLength} mm (guides)` : "");
-    out[1].note = `About ${Math.ceil((rodTotal + 2 * a.rodLength + (a.load !== "tindeq" ? 4 * s.guideLength : 0)) / 1000)} m in total.`;
-    if (a.load !== "tindeq")
-      out.push(item("Compression springs", `2 or 4 × wire ${s.wire} mm, outer Ø ${s.od} mm, ${s.length} mm long`, "Pick a listing that gives wire, outer Ø and length, then type its numbers into the app. Long springs (e.g. 300 mm) can be cut to length: count the coils after. Small mixed boxes are usually too weak.", `สปริงกด ลวด ${s.wire} มิล วงนอก ${s.od}`, `compression spring ${s.wire}mm wire ${s.od}mm OD`));
-    if (a.load !== "springs") out.push(item("Carabiner, climbing-rated", "1", "Look for a kN number on the spine. Keyring clips are not rated.", "คาราบิเนอร์ ปีนเขา kN", "climbing carabiner kN"));
+    out.push(item("M5 × 30 mm bolts", `${2 * a.joints}, with a nut + washer each (join the platform parts)`, "", "M5 x 30 socket head bolt"));
+    if (a.load !== "tindeq") {
+      const s = a.spring;
+      out.push(item(`M5 × ${a.guideBolt} mm bolts`, "2 or 4 (one per spring), 2 nuts + 2 washers each (spring guides)", "", `M5 x ${a.guideBolt} socket head bolt`));
+      out.push(item("Compression springs", `2 or 4 × wire ${s.wire} mm, outer Ø ${s.od} mm, ${s.length} mm long`, "Pick a listing that gives wire, outer Ø and length, then type its numbers into the app. Inner Ø must be over 6 mm (the M5 guide bolt). Small mixed boxes are usually too weak.", `compression spring ${s.wire}mm wire ${s.od}mm OD ${s.length}mm`));
+    }
+    if (a.load !== "springs") out.push(item("Carabiner, climbing-rated", "1", "Look for a kN number on the spine. Keyring clips are not rated.", "climbing carabiner kN rated"));
   }
   if (a?.kind === "foot") {
-    out[3].qty = "about 1 m per gripper + 2 × 40 cm for the plate";
-    out.push(item("Carabiner, climbing-rated", "1", "Look for a kN number on the spine. Keyring clips are not rated.", "คาราบิเนอร์ ปีนเขา kN", "climbing carabiner kN"));
+    out[2].qty = "about 1 m per gripper + 2 × 40 cm for the plate";
+    out.push(item("Carabiner, climbing-rated", "1", "Look for a kN number on the spine. Keyring clips are not rated.", "climbing carabiner kN rated"));
   }
   return out;
 }
@@ -36,17 +36,17 @@ export function partsFor(info) {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 export function partsHtml(list) {
-  return `<details class="parts" open><summary><strong>Parts to buy</strong></summary><ul>` +
+  return `<details class="parts" open><summary><strong>Parts to buy</strong> (stock sizes, nothing to cut)</summary><ul>` +
     list.map((p) => `<li><b>${esc(p.what)}</b>${p.qty ? `: ${esc(p.qty)}` : ""}${p.note ? `<br><span class="parts-note">${esc(p.note)}</span>` : ""}<br>` +
-      p.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.shop)}: “${esc(l.q)}”</a>`).join(" · ") + `</li>`).join("") +
+      `<a href="${esc(p.url)}" target="_blank" rel="noopener">Search: “${esc(p.q)}”</a></li>`).join("") +
     `</ul><p class="parts-note">Example searches, not endorsements. Check the size on the listing. Any hardware or climbing shop works too.</p></details>`;
 }
 
 export function partsText(list) {
   return `
 ==============================================================================
-PARTS TO BUY (example searches; check the size on the listing; any hardware shop works too)
+PARTS TO BUY (stock sizes, nothing to cut; example searches, check the size on the listing)
 ` + list.map((p) => `
 - ${p.what}${p.qty ? `: ${p.qty}` : ""}${p.note ? `\n  ${p.note}` : ""}
-${p.links.map((l) => `  ${l.shop} "${l.q}": ${l.url}`).join("\n")}`).join("\n") + "\n";
+  Search: "${p.q}"`).join("\n") + "\n";
 }

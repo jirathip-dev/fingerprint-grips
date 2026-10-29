@@ -28,8 +28,11 @@ export const ADDON_DIM = {
   ledge: 12, // the gripper's back rests on two ledges this high: room under it for FDS tips
   ledgeIn: 7, // how far each ledge reaches under the gripper's end walls
   sideGap: 2, // gripper to rail, each side
-  rail: { w: 18, h: 28 },
-  rod: { r: 2.25, z: 6 }, // M4 threaded rod along each rail clamps the printed pieces together
+  rail: { w: 18, h: 32 },
+  // joints: one M5 x 30 bolt per rail across each cut, low down (the pull tries to open the joint
+  // at the bottom). Head and nut sit in pockets open to the outside and the bed; wall = printed
+  // material each side of the cut that the bolt clamps.
+  joint: { z: 6, pocketW: 9.5, pocketH: 12, wall: 10, headPocket: 38, nutPocket: 12, bolt: 30 },
   palm: { root: 52, top: 18, arc: 7, notch: 10 }, // solid rest: base, top, rounding; notch = cord slot for leg push
   travel: 50, // the cord length sets where the gripper sits: 0-50 mm from the palm rest
   legReach: 260, // preview only: leg push, gripper this far in front of the rest (in your hands)
@@ -37,7 +40,7 @@ export const ADDON_DIM = {
   maxPiece: 236, // longest printed piece (A1 bed is 256 mm)
   tindeq: { floor: 6, guideH: 14, guideT: 4, clear: 4, clip: 34 }, // clip = carabiner / short cord to the wall
   wall: { t: 20, window: 16, over: 14, buttress: 15 }, // anchor wall: carabiner/cord window + bridge above it
-  spring: { carriage: 18, preload: 1, cordHole: 12, post: 10, seat: 1.5, rodHole: 2.4 },
+  spring: { carriage: 18, preload: 1, cordHole: 12, post: 10, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
   foot: { len: 230, width: 160, t: 11, lugL: 70, lugT: 20, holeD: 14, holeZ: 26, over: 18, apex: 250, footW: 110 },
 };
 
@@ -47,7 +50,7 @@ export const LOADS = ["tindeq", "springs", "both"];
 export const RATING = { platform: 60, foot: 100 }; // kg
 export const DESIGN_FACTOR = 2;
 /** Allowable stress for PETG prints (MPa). Assumptions: they need coupon tests. */
-export const ALLOW = { inLayer: 20, acrossLayer: 6, compression: 25, rodN: 2000 /* M4 4.8, below proof */ };
+export const ALLOW = { inLayer: 20, acrossLayer: 6, compression: 25, boltN: 4000 /* M5 8.8, about half proof */ };
 
 // ---------------------------------------------------------------- springs
 export const SPRING_FIELDS = {
@@ -97,7 +100,7 @@ export function validateSpring(sp) {
   if (problems.length) return problems;
   const m = springMath(sp);
   if (m.C < 4 || m.C > 14) problems.push(`That spring is too ${m.C < 4 ? "tight" : "loose"} a coil (OD ÷ wire should be about 5–15). Check the wire and OD.`);
-  if (m.ID < 6) problems.push(`Inner diameter ${m.ID.toFixed(1)} mm is too small for the M4 guide rod (needs 6 mm or more).`);
+  if (m.ID < 6) problems.push(`Inner diameter ${m.ID.toFixed(1)} mm is too small for the M5 guide bolt (needs 6 mm or more).`);
   if (Number(sp.coils) - 2 < 2) problems.push("Too few coils: a spring needs at least 4 turns.");
   if (m.travel < 5) problems.push(`That spring only gives ${m.travel.toFixed(1)} mm of travel. Use a longer spring or fewer, thicker coils.`);
   return problems;
@@ -141,7 +144,7 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   const R = { kind: "platform", Wg, Dg, Hg, inner, outer, zl, Zc, Yc, Zp: palmHeight(gL, zl), xPalm: A.palm.root, problems: [] };
   R.xBayEnd = R.xPalm + A.travel + Hg; // gripper top at its furthest from the palm
   R.gripperX0 = R.xPalm + A.travel / 2; // preview position
-  R.rods = [-1, 1].map((k) => ({ y: k * (inner + A.rail.w / 2), z: A.rod.z }));
+  R.railY = [-1, 1].map((k) => k * (inner + A.rail.w / 2));
   const m = springMath(spring);
 
   // Tindeq bay. With springs fitted, everything in line moves toward you by the spring travel,
@@ -189,9 +192,18 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
     }
   R.spring.kg2 = springMath({ ...spring, count: 2 }).totalKg;
   R.spring.kg4 = springMath({ ...spring, count: 4 }).totalKg;
-  R.cuttable = [[R.xPalm + 5, R.xBayEnd - 5], [R.tindeqRun[0] + 8, R.tindeqRun[1] - 8], [R.xW1 + R.stopLen + 2, R.xC0 - 2]];
+  // joints: the head pocket reaches past the cut, so keep the whole joint inside one open stretch
+  const J = A.joint;
+  const before = J.wall + J.headPocket + 2, after = J.wall + J.nutPocket + 2;
+  R.cuttable = [[R.xPalm + 5, R.xBayEnd - 5], [R.tindeqRun[0] + 8, R.tindeqRun[1] - 8], [R.xW1 + R.stopLen + 2, R.xC0 - 2]]
+    .map(([a, b]) => [a + before, b - after]).filter(([a, b]) => b > a);
   R.pieces = splitPieces(R.xEnd, R.cuttable, A.maxPiece);
-  R.rodLength = Math.ceil(R.xEnd + 16);
+  R.cuts = R.pieces.slice(1).map(([x0]) => x0);
+  R.boltY = [-1, 1].map((k) => k * (outer - J.pocketW / 2)); // bolt line, inside each rail
+  // spring guides: M5 bolt, head on the Tindeq side of the wall, through wall + spring + carriage,
+  // then washer + nyloc nut. Shop length: wall to carriage back + washer, nut and 2 threads.
+  R.guideBolt = [60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200].find((n) => n >= R.xC1 - R.xW0 + 8) ?? null;
+  if (!R.guideBolt) R.problems.push(`Those springs are too long for a stock M5 bolt (needs ${Math.ceil(R.xC1 - R.xW0 + 8)} mm). Use shorter springs.`);
   R.screen = screenRig(R);
   return R;
 }
@@ -237,10 +249,17 @@ function screenRig(R) {
   const add = (part, mpa, allow, unit = "MPa") => out.push({ part, value: round1(mpa), allow, unit, ok: mpa <= allow });
   const w = A.rail.w, h = A.rail.h;
   add("rails (bending)", (F * (zLoad - h / 2)) / ((2 * w * h * h) / 6) + F / (2 * w * h), ALLOW.inLayer);
-  const zc = h - 4; // butt-joint compression centre, near the rail top
-  const C = (F * (zLoad - A.rod.z)) / (zc - A.rod.z);
-  add("rod tension (each)", (C - F) / 2, ALLOW.rodN, "N");
-  add("butt joint (compression)", C / (2 * w * 8), ALLOW.compression);
+  // rail at a bolt pocket: the pocket takes a corner out of the section
+  const J = A.joint, pw = J.pocketW, ph = J.pocketH;
+  const Ap = (w - pw) * ph + w * (h - ph);
+  const zp = ((w - pw) * ph * (ph / 2) + w * (h - ph) * ((h + ph) / 2)) / Ap;
+  const Ip = ((w - pw) * ph ** 3) / 12 + (w - pw) * ph * (ph / 2 - zp) ** 2 + (w * (h - ph) ** 3) / 12 + w * (h - ph) * ((h + ph) / 2 - zp) ** 2;
+  add("rails at the bolt pockets", ((F / 2) * (zLoad - zp) * zp) / Ip + F / 2 / Ap, ALLOW.inLayer);
+  // joint: pressed together at the top, held by the bolt at the bottom
+  const c = 0.6 * (h - J.z);
+  const C = ((F / 2) * (zLoad - J.z)) / (h - c / 3 - J.z);
+  add("joint bolt pull (each)", C - F / 2, ALLOW.boltN, "N");
+  add("joint top (compression)", (2 * C) / (w * c), ALLOW.compression);
   const b = 2 * R.outer;
   add("palm rest root", (6 * F * R.Zp) / ((b - A.palm.notch) * A.palm.root ** 2), ALLOW.acrossLayer);
   const t = A.wall.t + A.wall.buttress;
@@ -320,7 +339,15 @@ export function buildRig(r, R) {
     const w = m.kg % 10 === 0 ? 2.4 : 1.2;
     tools.push(box(r, m.x - w / 2, m.x + w / 2, m.rail > 0 ? inner : -outer, m.rail > 0 ? outer : -inner, A.rail.h - 1.2, A.rail.h + 1));
   }
-  for (const rod of R.rods) tools.push(prismX(teardrop(r, rod.y, rod.z, A.rod.r), -1, R.xEnd + 1));
+  // joint bolts: hole across each cut, head pocket on the near piece, nut pocket on the far one
+  const J = A.joint;
+  for (const xc of R.cuts)
+    for (const yb of R.boltY) {
+      const k = Math.sign(yb), yo = k * outer, yi = yo - k * J.pocketW;
+      tools.push(prismX(teardrop(r, yb, J.z, 2.75), xc - J.wall - 1, xc + J.wall + 1));
+      tools.push(box(r, xc - J.wall - J.headPocket, xc - J.wall, Math.min(yo, yi) - (k < 0 ? 1 : 0), Math.max(yo, yi) + (k > 0 ? 1 : 0), -1, J.pocketH));
+      tools.push(box(r, xc + J.wall, xc + J.wall + J.nutPocket, Math.min(yo, yi) - (k < 0 ? 1 : 0), Math.max(yo, yi) + (k > 0 ? 1 : 0), -1, J.pocketH));
+    }
   for (const t of tools) body = body.cut(t);
 
   const parts = R.pieces.map(([x0, x1], i) => ({

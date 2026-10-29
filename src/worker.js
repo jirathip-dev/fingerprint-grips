@@ -58,7 +58,7 @@ function addonInfo(kind, R, parts) {
   const grams = parts.reduce((g, p) => g + massG(replicad.measureVolume(p.shape)), 0);
   const base = { kind, grams, pieces: parts.map((p) => p.name), screen: R.screen };
   if (kind === "foot") return { ...base, size: [R.len, R.width], gap: R.gap, apex: R.apex };
-  const info = { ...base, length: Math.round(R.xEnd), width: Math.round(2 * R.outer), rodLength: R.rodLength, travel: 50, palmHeight: R.Zp };
+  const info = { ...base, length: Math.round(R.xEnd), width: Math.round(2 * R.outer), joints: R.cuts.length, guideBolt: R.guideBolt, travel: 50, palmHeight: R.Zp };
   {
     const s = R.spring;
     info.spring = { count: s.count, k: +s.k.toFixed(2), travel: +s.travel.toFixed(1), totalKg: +s.totalKg.toFixed(1), kgPerMm: +s.kgPerMm.toFixed(2), limitedBy: s.limitedBy, od: s.OD, wire: s.d, length: s.L0, marks: R.marks.filter((m) => m.n === s.count).map((m) => m.kg), kg2: +s.kg2.toFixed(1), kg4: +s.kg4.toFixed(1), guideLength: Math.ceil(R.xEnd - R.xW0 + 10) };
@@ -67,7 +67,7 @@ function addonInfo(kind, R, parts) {
 }
 
 self.onmessage = async ({ data }) => {
-  const { id, type, hand, side, device, addon = "none", spring, load = "tindeq", brace = "palm" } = data;
+  const { id, type, hand, side, device, axle = "pin", addon = "none", spring, load = "tindeq", brace = "palm" } = data;
   const usesSprings = addon === "platform" && load !== "tindeq";
   try {
     await ready;
@@ -77,7 +77,7 @@ self.onmessage = async ({ data }) => {
       return;
     }
     const t0 = performance.now();
-    const gripper = buildGripper(replicad, hand, { device, side });
+    const gripper = buildGripper(replicad, hand, { device, side, axle });
     const { parts, info } = gripper;
     // the spring section is always printed; without springs it is sized for the default spring
     const extra = addon === "none" ? null : buildAddon(addon, gripper, usesSprings ? spring : SPRING_DEFAULT, load, brace);

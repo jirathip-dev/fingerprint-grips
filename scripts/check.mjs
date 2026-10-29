@@ -30,7 +30,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import opencascade from "replicad-opencascadejs";
 import * as r from "replicad";
-import { buildGripper, printOrient, validate, DEFAULT_HAND, DIM, mirrored } from "../src/model.js";
+import { buildGripper, printOrient, validate, layout, DEFAULT_HAND, DIM, mirrored, PIN_LENGTHS, BOLT_LENGTHS, PIN_ENGAGE, BOLT_SPARE, CS, CS_LENGTHS, csBoltFor } from "../src/model.js";
 import {
   rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, printOrientAddon,
   springMath, validateSpring, SPRING_DEFAULT, ADDON_DIM, TINDEQ,
@@ -123,6 +123,24 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
       for (const xo of outer) if (!solidAt(frame, [X(xo), s.yc, s.zc], 0.3)) fail(`${tag} ${s.name} pin hole breaks through its wall`);
     }
 
+    // 4b. stock hardware: every pin and bolt is a shop length (nothing to cut), each pin fits its
+    //     two blind holes and stays in both walls even pushed to one side, the bolt reaches the nut
+    for (const s of L.slots) {
+      const room = s.w + 2 * DIM.pinDepth;
+      if (!PIN_LENGTHS.includes(s.pinLength)) fail(`${tag} ${s.name} pin ${s.pinLength} mm is not a stock length`);
+      if (s.pinLength > room - 0.5) fail(`${tag} ${s.name} pin ${s.pinLength} mm doesn't fit its holes (${room.toFixed(1)} mm end to end)`);
+      if (s.pinLength - s.w - DIM.pinDepth < PIN_ENGAGE - 1e-9) fail(`${tag} ${s.name} pin ${s.pinLength} mm can slip out of a wall (slot ${s.w} mm)`);
+      if (s.w < s.f.tipWidth + DIM.slotExtra - 1e-9) fail(`${tag} ${s.name} slot narrowed for a stock pin`);
+    }
+    const bolt = info.hardware.boltLength;
+    if (!BOLT_LENGTHS.includes(bolt)) fail(`${tag} clamp bolt ${bolt} mm is not a stock length`);
+    else if (bolt < L.width + BOLT_SPARE) fail(`${tag} clamp bolt ${bolt} mm is too short for the ${L.width.toFixed(0)} mm frame`);
+    for (const rod of L.rods) {
+      const p = [X(L.width / 2), rod.y, rod.z];
+      // 3.6 mm probe cube: fits inside a 5.5 mm M5 clearance hole, pokes into the wall of anything under ~5.1 mm
+      if (!airAt(frame, p, 1.8)) fail(`${tag} clamp bolt hole at z=${rod.z.toFixed(0)} is too small for M5`);
+    }
+
     // 5. cord tunnel: enclosed shell all round, open only at the two top holes
     const c = L.cord;
     const shell = 3;
@@ -188,6 +206,16 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
         if (!solidAt(frame, [xm, s.yLedge + DIM.fdp.ledgeDepth / 2, s.zLedge - 1])) fail(`${tag} ${s.name}: no ledge behind the roller`);
         // spec, not layout: the pad rests on the ledge, so it can't stand above the roller top
         if (!airAt(frame, [xm, s.yLedge + DIM.fdp.ledgeDepth / 2, s.zTop + 0.3], 0.25)) fail(`${tag} ${s.name}: ledge is above the roller waist`);
+        // spec: the shelf behind the roller is level with the roller's middle (axle height)
+        const yShelf = s.yc + s.r + DIM.fdp.ledgeGap + DIM.fdp.ledgeDepth / 2;
+        if (!airAt(frame, [xm, yShelf, s.zc + 1], 0.4) || !solidAt(frame, [xm, yShelf, s.zc - 1], 0.4)) fail(`${tag} ${s.name}: shelf behind the roller is not at the roller's middle`);
+        // spec: below that, the back is a curve that follows the roller with a small gap
+        const g = DIM.fdp.ledgeGap;
+        for (const deg of [-20, -45, -70, -80]) { // straight down is where the front opening starts
+          const a = (deg * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+          if (!airAt(frame, [xm, s.yc + (s.r + g / 2) * ca, s.zc + (s.r + g / 2) * sa], 0.2)) fail(`${tag} ${s.name}: roller rubs the back at ${deg}°`);
+          if (!solidAt(frame, [xm, s.yc + (s.r + g + 1.2) * ca, s.zc + (s.r + g + 1.2) * sa], 0.4)) fail(`${tag} ${s.name}: back behind the roller is not curved to it at ${deg}°`);
+        }
         // claw gripper: the finger can't pass through; closed at the back where the fingertip is
         if (!solidAt(frame, [xm, s.yCavBack + 2, s.zTop + 2])) fail(`${tag} ${s.name}: FDP slot is open at the back`);
       } else {
@@ -227,6 +255,56 @@ async function stlCheck(tag, p) {
   const [lo, hi] = o.boundingBox.bounds;
   if (Math.max(hi[0] - lo[0], hi[1] - lo[1]) > BED + 0.01 || hi[2] - lo[2] > 250) fail(`${tag} ${p.name}: ${(hi[0] - lo[0]).toFixed(0)} x ${(hi[1] - lo[1]).toFixed(0)} mm does not fit the bed`);
 }
+// ---------------------------------------------------------------- roller axle option: M3 countersunk bolt
+//  B1. stock length; tip 1.5-3.3 mm into the far wall; slot never narrowed
+//  B2. head sits flush in its cone (hollow just inside the face, not proud), skin left behind the tip hole
+//  B3. inside every shared wall, holes from the two sides keep at least 0.8 mm of plastic between them
+//  B4. pin and bolt axles give the same frame apart from the holes (nothing else moves)
+const WEB = 0.8;
+for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
+  const tag = `${device}/bolt-axle`;
+  const { parts, layout: L } = buildGripper(r, DEFAULT_HAND, { device, side: "left", axle: "bolt" });
+  const frames = parts.filter((p) => p.kind === "frame");
+  let frame = frames[0].shape.clone();
+  for (const p of frames.slice(1)) frame = frame.fuse(p.shape.clone());
+  const Lp = layout(device, DEFAULT_HAND, "pin");
+  for (const s of L.slots) {
+    const want = s.f.tipWidth + DIM.slotExtra + (s.name === "pinky" ? DIM.pinkyExtra : 0);
+    if (!CS_LENGTHS.includes(s.pinLength)) fail(`${tag} ${s.name}: M3 x ${s.pinLength} is not a stock length`);
+    const tip = s.pinLength - CS.head - s.w;
+    if (tip < CS.tip[0] - 1e-9 || tip > CS.tip[1] + 1e-9) fail(`${tag} ${s.name}: M3 x ${s.pinLength} tip sits ${tip.toFixed(1)} mm in the wall (needs ${CS.tip[0]}-${CS.tip[1]})`);
+    if (s.w < want - 1e-9) fail(`${tag} ${s.name}: slot narrowed for the bolt`);
+    const headX = s.head === "lo" ? s.xs : s.xs + s.w, dir = s.head === "lo" ? -1 : 1; // dir: into the head wall
+    const tipX = s.head === "lo" ? s.xs + s.w : s.xs;
+    if (!airAt(frame, [headX + dir * 0.6, s.yc + 2.2, s.zc], 0.3)) fail(`${tag} ${s.name}: no countersink for the bolt head`);
+    // the M3 head is 6 mm across: its seat must be open out to r 2.9 just inside the face
+    if (!airAt(frame, [headX + dir * 0.12, s.yc + 2.8, s.zc], 0.1)) fail(`${tag} ${s.name}: countersink too narrow for the M3 head`);
+    if (!airAt(frame, [tipX - dir * (tip - 0.3), s.yc, s.zc], 0.3)) fail(`${tag} ${s.name}: tip hole too shallow for the bolt`);
+    if (!solidAt(frame, [tipX - dir * (tip + 1.0), s.yc, s.zc], 0.3)) fail(`${tag} ${s.name}: tip hole breaks through its wall`);
+  }
+  // B3: every shared wall, both sides
+  for (let i = 0; i < L.slots.length - 1; i++) {
+    const a = L.slots[i], b = L.slots[i + 1];
+    const hole = (s, side) => (s.head === side ? { r: CS.coneR, d: CS.head + 0.05 } : { r: DIM.pinHoleR, d: s.tip + 0.3 });
+    const ha = hole(a, "hi"), hb = hole(b, "lo");
+    const dist = Math.hypot(a.yc - b.yc, a.zc - b.zc);
+    if (ha.d + hb.d > DIM.wall - WEB && dist - ha.r - hb.r < WEB) fail(`${tag}: holes of ${a.name} and ${b.name} meet inside their shared wall (${(dist - ha.r - hb.r).toFixed(1)} mm apart)`);
+  }
+  // B4
+  // rollers stay put (FDS roof peaks scale with slot width, so the top may rise a little)
+  const same = ["yF", "zBottom"].every((k) => Math.abs(L[k] - Lp[k]) < 1e-6) && L.slots.every((q, i) => q.yc === Lp.slots[i].yc && q.zc === Lp.slots[i].zc && q.r === Lp.slots[i].r);
+  if (!same) fail(`${tag}: the frame moved when the axle changed`);
+  console.log(`ok?  ${tag}: ${L.slots.map((s) => `${s.name} M3x${s.pinLength} (tip ${(s.pinLength - CS.head - s.w).toFixed(1)}, head ${s.head})`).join(", ")}; width ${L.width} vs ${Lp.width} with pins`);
+}
+{
+  // csBoltFor by itself: every slot from 15 to 35 mm gets a stock bolt that lands, never narrower
+  for (let w = 15; w <= 35; w += 0.5) {
+    const b = csBoltFor(w);
+    const tip = b.length - CS.head - b.w;
+    if (!CS_LENGTHS.includes(b.length) || b.w < w - 1e-9 || tip < CS.tip[0] - 1e-9 || tip > CS.tip[1] + 1e-9 || b.w - w > 5.1) fail(`csBoltFor(${w}): M3x${b.length} slot ${b.w} tip ${tip.toFixed(2)}`);
+  }
+}
+
 for (const device of ["fdp", "fds"]) {
   const g = buildGripper(r, DEFAULT_HAND, { device, side: "right" });
   for (const SP of [SPRING_DEFAULT, { ...SPRING_DEFAULT, count: 4 }]) {
@@ -312,6 +390,30 @@ for (const device of ["fdp", "fds"]) {
       if (!airAt(rig, [mk.x, mk.rail * (R.inner + ADDON_DIM.rail.w / 2), ADDON_DIM.rail.h - 0.5], 0.4)) fail(`${tag}: ${mk.kg} kg mark (${mk.n} springs) missing on the rail`);
       const dx = (mk.kg * 9.81) / (mk.n * m.k) - ADDON_DIM.spring.preload;
       if (Math.abs(R.xC0 - mk.x - dx) > 0.05) fail(`${tag}: ${mk.kg} kg mark (${mk.n} springs) is in the wrong place`);
+    }
+    // joints: every cut has an M5 bolt low in each rail, head + nut pockets clear, solid wall clamped
+    const J = ADDON_DIM.joint;
+    if (R.cuts.length !== parts.filter((p) => p.name.startsWith("platform_")).length - 1) fail(`${tag}: ${R.cuts.length} joints for ${parts.length - 1} platform pieces`);
+    // joints (bolt, head pocket, nut pocket) must stay clear of the palm rest, the anchor wall with
+    // its buttress and stop posts, and the end posts: pockets there would weaken them
+    const solidZones = [[-1, R.xPalm + ADDON_DIM.palm.root], [R.xW0 - ADDON_DIM.wall.buttress, R.xW1 + R.stopLen], [R.xC1, R.xEnd + 1]];
+    for (const xc of R.cuts) {
+      const j0 = xc - J.wall - J.headPocket, j1 = xc + J.wall + J.nutPocket;
+      for (const [a, b] of solidZones) if (j0 < b && j1 > a) fail(`${tag}: joint at x=${xc.toFixed(0)} cuts into a solid section (${a.toFixed(0)}-${b.toFixed(0)})`);
+    }
+    for (const xc of R.cuts)
+      for (const yb of R.boltY) {
+        // probe cube 3.6 mm: fits inside a 5.5 mm hole (diagonal 5.1), not inside an M4 or no hole
+        for (const dx of [-J.wall + 2, -2, 2, J.wall - 2]) if (!airAt(rig, [xc + dx, yb, J.z], 1.8)) fail(`${tag}: joint at x=${xc.toFixed(0)}: no M5 bolt hole through the rail`);
+        for (const dx of [-J.wall - 5, J.wall + 5]) if (!airAt(rig, [xc + dx, yb, J.z], 3.5)) fail(`${tag}: joint at x=${xc.toFixed(0)}: no room for the bolt head / nut`);
+        if (!solidAt(rig, [xc - J.wall / 2, yb, J.z + 4.5], 0.5) || !solidAt(rig, [xc + J.wall / 2, yb, J.z + 4.5], 0.5)) fail(`${tag}: joint at x=${xc.toFixed(0)}: nothing for the bolt to clamp`);
+        if (J.bolt < 2 * J.wall + 8 || J.bolt > 2 * J.wall + J.nutPocket) fail(`${tag}: M5 x ${J.bolt} joint bolt doesn't suit a ${2 * J.wall} mm clamp`);
+        if (!airAt(rig, [xc - J.wall - J.bolt - 3, yb, J.z], 3.5)) fail(`${tag}: head pocket too short to feed the bolt in`);
+      }
+    // spring guide: stock bolt, reaches through wall + spring + carriage with room for the nut
+    {
+      if (![60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200].includes(R.guideBolt)) fail(`${tag}: spring guide bolt ${R.guideBolt} mm is not a stock length`);
+      else if (R.guideBolt < R.xC1 - R.xW0 + 8) fail(`${tag}: spring guide bolt ${R.guideBolt} mm can't reach past the carriage`);
     }
     if (R.screen.kg + 0.05 < springMath({ ...SP, count: 4 }).totalKg) fail(`${tag}: strength screen ignores the 4-spring load (${R.screen.kg} kg)`);
     // A8

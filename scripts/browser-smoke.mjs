@@ -83,6 +83,17 @@ console.log(`5 download         ${t5} ms -> ${zipInfo.name}, ${(zipInfo.bytes / 
 console.log(`                   ${zipInfo.files.join(", ")}`);
 console.log(`  status           "${await status()}"`);
 
+// 5b: roller axle -> M3 bolt: parts list and summary switch, the rebuilt model is still fine
+await radio("axle", "bolt");
+await waitFor(`document.querySelector('#summary').innerText.includes('M3 countersunk bolts') && document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
+{
+  const t = await ev(`document.querySelector('#summary .parts').innerText`);
+  if (!/M3 countersunk bolts \(roller axles\): 4: pinky \d+, ring \d+, middle \d+, index \d+ mm/i.test(t) || /dowel/i.test(t)) throw new Error("bolt axle: parts list wrong: " + t.slice(0, 300));
+  console.log(`5b axle            M3 bolt: ${t.match(/4: pinky[^\n]*/i)[0]}`);
+}
+await radio("axle", "pin");
+await waitFor(`document.querySelector('#summary').innerText.includes('3 mm dowel pins') && document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
+
 // 6: platform add-on: Tindeq -> springs (live kg readout) -> both, leg push; zip gains print/addon/
 await radio("addon", "platform");
 await waitFor(`document.querySelector('#summary').innerText.includes('Tindeq, palm push') && document.querySelector('#status').textContent.startsWith('Ready')`, 90000);
@@ -94,8 +105,10 @@ console.log(`6 platform         Tindeq: spring inputs hidden=${springBoxHidden};
   // parts list: spring line + working shop searches for the chosen springs
   const parts = await ev(`[...document.querySelectorAll('#summary .parts li')].map(l => l.querySelector('b').textContent.toLowerCase() + ' | ' + [...l.querySelectorAll('a')].map(a => a.href).join(' '))`);
   const spring = parts.find((p) => p.startsWith("compression springs"));
-  if (!spring || !spring.includes("lazada.co.th/catalog/?q=") || !spring.includes("aliexpress.com/wholesale")) throw new Error("parts list has no spring line with shop searches: " + JSON.stringify(parts));
-  if (!parts.some((p) => p.startsWith("3 mm steel rod")) || !parts.some((p) => p.startsWith("m4 threaded rod"))) throw new Error("parts list missing pins or rods");
+  if (!spring || !spring.includes("google.com/search?tbm=shop&q=compression%20spring")) throw new Error("parts list has no spring line with a search: " + JSON.stringify(parts));
+  if (!parts.some((p) => p.startsWith("3 mm steel dowel pins")) || !parts.some((p) => /^m5 × \d+ mm bolts/.test(p))) throw new Error("parts list missing pins or bolts");
+  const text = await ev(`document.querySelector('#summary .parts').innerText`);
+  if (/[\u0E00-\u0E7F]|lazada|aliexpress|threaded rod|cut from/i.test(text)) throw new Error("parts list has Thai text, shop names or cut-to-length parts: " + text.slice(0, 300));
   console.log(`  parts list       ${parts.length} lines: ${parts.map((p) => p.split(" | ")[0]).join(", ")}`);
 }
 const kgBefore = await ev(`document.querySelector('#spring-out').innerText`);
