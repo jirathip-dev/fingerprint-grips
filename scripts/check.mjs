@@ -7,7 +7,7 @@
 //  3. slices don't overlap each other (they assemble)
 //  4. each roller pin hole is blind: open toward its roller, closed to the outside
 //  5. the cord tunnel is enclosed (open only at two top holes), holes >= 55% of the width apart, dead centre (same distance from both ends)
-//  6. FDP: roof, ledge behind the roller, closed back. FDS: open back, V roof, roller = middle segment
+//  6. FDP: roof, back hugging the spool (cradle below the axle, wall above, curved at the waist), closed back. FDS: open back, V roof, roller = middle segment
 //  7. the finger can get in: open from below, in front of the roller, up to the roof (both)
 //  8. every roller is a spool: raised rims, concave waist
 //  7. every printed part fits a 256 mm Bambu A1 bed
@@ -30,7 +30,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import opencascade from "replicad-opencascadejs";
 import * as r from "replicad";
-import { buildGripper, printOrient, validate, layout, DEFAULT_HAND, DIM, mirrored, PIN_LENGTHS, BOLT_LENGTHS, PIN_ENGAGE, BOLT_SPARE, CS, CS_LENGTHS, csBoltFor } from "../src/model.js";
+import { buildGripper, printOrient, validate, layout, spoolR, DEFAULT_HAND, DIM, mirrored, PIN_LENGTHS, BOLT_LENGTHS, PIN_ENGAGE, BOLT_SPARE, CS, CS_LENGTHS, csBoltFor } from "../src/model.js";
 import {
   rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, printOrientAddon,
   springMath, validateSpring, loopCord, SPRING_DEFAULT, ADDON_DIM, TINDEQ,
@@ -179,6 +179,41 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
     }
     if (c.xa - c.half < DIM.wall || c.xb + c.half > L.width - DIM.wall) fail(`${tag} cord hole breaks out of the end wall`);
 
+    // 6b. divider walls cut back (HoG style): between the fingers only a round boss round each
+    //     axle, a bit smaller than the roller, so the walls never touch the fingers. Each slice
+    //     is still one piece, and the strength screen passes.
+    for (const p of frames) if (p.shape.solids.length !== 1) fail(`${tag} ${p.name} is ${p.shape.solids.length} loose pieces`);
+    for (const it of info.screen.items) if (!it.ok) fail(`${tag}: strength screen: ${it.part} ${it.value} > ${it.allow} MPa`);
+    L.slots.forEach((s, i) => {
+      const rb = s.r - DIM.bossInset;
+      for (const wx of [s.wallX + DIM.wall / 2, s.xs + s.w + DIM.wall / 2]) {
+        const X0 = X(wx);
+        // boss: solid just inside its edge, in front of and above the axle
+        for (const deg of [180, 135, 90]) {
+          const a = (deg * Math.PI) / 180;
+          if (!solidAt(frame, [X0, s.yc + (rb - 0.8) * Math.cos(a), s.zc + (rb - 0.8) * Math.sin(a)], 0.3)) fail(`${tag} ${s.name}: no round boss round the axle in the wall (${deg}°)`);
+        }
+        // ...and smaller than the roller: air between the boss and the roller's edge, in front
+        // and on top, where the finger touches the roller. Skip where the neighbouring slot's
+        // own boss sits in the same wall.
+        // wall the neighbouring slot keeps in this shared wall (its boss, the part behind its axle)
+        const nb = [L.slots[i - 1], L.slots[i + 1]].filter((o) => o && (wx === o.wallX + DIM.wall / 2 || wx === o.xs + o.w + DIM.wall / 2));
+        const inNb = (y, z) => nb.some((o) => Math.hypot(y - o.yc, z - o.zc) < o.r - DIM.bossInset + 0.6 || (y > o.yc - 0.6 && (device === "fds" || z < o.zc + 0.6 || y > o.yCavBack - 0.6)) || z > (device === "fdp" ? o.zCavTop : o.zRoof) - 0.6);
+        // FDP: in front, front-top and on top. FDS: in front and front-top; behind the axle the
+        // wall has to stay (the back is open for the tips, so it is what holds the roller up)
+        for (const deg of device === "fdp" ? [180, 135, 90, 45] : [180, 135]) {
+          const a = (deg * Math.PI) / 180, rr = s.r - DIM.bossInset / 2;
+          const y = s.yc + rr * Math.cos(a), z = s.zc + rr * Math.sin(a);
+          if (!inNb(y, z) && !airAt(frame, [X0, y, z], 0.25)) fail(`${tag} ${s.name}: wall reaches the roller's edge at ${deg}° (the finger would touch it)`);
+        }
+        // the wall is open where the finger runs: in front of the roller, and over it
+        const yIn = s.yFront - 3, zIn = s.zc;
+        if (!inNb(yIn, zIn) && !airAt(frame, [X0, yIn, zIn], 0.5)) fail(`${tag} ${s.name}: divider wall in front of the roller (in the finger's way)`);
+        const zOver = (device === "fdp" ? s.zTop : s.zApex) + 3;
+        if (!inNb(s.yc - 2, zOver) && !airAt(frame, [X0, s.yc - 2, zOver], 0.5)) fail(`${tag} ${s.name}: divider wall over the roller (in the finger's way)`);
+      }
+    });
+
     // 6-8. finger features
     for (const s of L.slots) {
       const xm = X(s.xs + s.w / 2);
@@ -203,19 +238,22 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
       if (device === "fdp") {
         if (!solidAt(frame, [xm, s.yc, s.zCavTop + 1.5])) fail(`${tag} ${s.name}: no roof above the roller`);
         if (solidAt(frame, [xm, s.yc, s.zCavTop - 1.5])) fail(`${tag} ${s.name}: roof gap is closed`);
-        if (!solidAt(frame, [xm, s.yLedge + DIM.fdp.ledgeDepth / 2, s.zLedge - 1])) fail(`${tag} ${s.name}: no ledge behind the roller`);
-        // spec, not layout: the pad rests on the ledge, so it can't stand above the roller top
-        if (!airAt(frame, [xm, s.yLedge + DIM.fdp.ledgeDepth / 2, s.zTop + 0.3], 0.25)) fail(`${tag} ${s.name}: ledge is above the roller waist`);
-        // spec: the shelf behind the roller is level with the roller's middle (axle height)
-        const yShelf = s.yc + s.r + DIM.fdp.ledgeGap + DIM.fdp.ledgeDepth / 2;
-        if (!airAt(frame, [xm, yShelf, s.zc + 1], 0.4) || !solidAt(frame, [xm, yShelf, s.zc - 1], 0.4)) fail(`${tag} ${s.name}: shelf behind the roller is not at the roller's middle`);
-        // spec: below that, the back is a curve that follows the roller with a small gap
-        const g = DIM.fdp.ledgeGap;
-        for (const deg of [-20, -45, -70, -80]) { // straight down is where the front opening starts
-          const a = (deg * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
-          if (!airAt(frame, [xm, s.yc + (s.r + g / 2) * ca, s.zc + (s.r + g / 2) * sa], 0.2)) fail(`${tag} ${s.name}: roller rubs the back at ${deg}°`);
-          if (!solidAt(frame, [xm, s.yc + (s.r + g + 1.2) * ca, s.zc + (s.r + g + 1.2) * sa], 0.4)) fail(`${tag} ${s.name}: back behind the roller is not curved to it at ${deg}°`);
+        // spec: the back hugs the spool (gap ~0.8 mm, at most 1.5): under the axle a cradle that
+        // follows the roller round, above it a wall straight up to the roof. Seen from the top it
+        // curves in at the waist like the roller. Probed at a rim and at the waist.
+        const g = DIM.fdp.ledgeGap, GAP_MAX = 1.5;
+        const xRim = s.xs + DIM.rollerSide + DIM.roller.rim - 0.8;
+        for (const xl of [xRim, s.xs + s.w / 2]) {
+          const rr = spoolR(s, xl), at = X(xl), where = xl === xRim ? "rim" : "waist";
+          for (const deg of [90, 45, 0, -20, -45, -70, -80]) { // +90: level with the roller top (back wall); straight down is the front opening
+            const a = (deg * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+            const P = (d) => (deg > 0 ? [at, s.yc + rr + d, s.zc + (s.r + 2) * Math.sin(a)] : [at, s.yc + (rr + d) * ca, s.zc + (rr + d) * sa]);
+            if (!airAt(frame, P(g / 2), 0.2)) fail(`${tag} ${s.name}: roller rubs the back (${where}, ${deg}°)`);
+            if (!solidAt(frame, P(GAP_MAX + 0.6), 0.4)) fail(`${tag} ${s.name}: back is not hugging the roller (${where}, ${deg}°): gap over ${GAP_MAX} mm`);
+          }
         }
+        // the fingertip stops against the back wall: solid from the roller's middle up to the roof
+        if (!solidAt(frame, [xm, s.yCavBack + 2, s.zTop - 2])) fail(`${tag} ${s.name}: no back wall behind the roller top`);
         // claw gripper: the finger can't pass through; closed at the back where the fingertip is
         if (!solidAt(frame, [xm, s.yCavBack + 2, s.zTop + 2])) fail(`${tag} ${s.name}: FDP slot is open at the back`);
       } else {
@@ -355,7 +393,7 @@ for (const device of ["fdp", "fds"]) {
       if (common(rig, up) > 2) fail(`${tag}: cord rising to the hands rubs a sharp edge at the hole mouth (${common(rig, up).toFixed(1)} mm3)`);
       // the flare itself: a point 3 mm inside the face, beside and above the hole, is outside the
       // plain hole but inside the flare
-      if (!airAt(rig, [H.xMouth + 3, R.Yc + 6, H.z + 6], 0.5)) fail(`${tag}: no flare at the leg-push hole mouth: the cord would bend over a sharp edge`);
+      if (!airAt(rig, [H.xMouth + 3, R.Yc + (H.r + 1.5) / Math.SQRT2, H.z + (H.r + 1.5) / Math.SQRT2], 0.5)) fail(`${tag}: no flare at the leg-push hole mouth: the cord would bend over a sharp edge`);
       for (const k of [-1, 1]) {
         const ys = k > 0 ? R.strap.y : [-R.strap.y[1], -R.strap.y[0]];
         const probe = r.makeBox([-1, ys[0] + 0.5, R.strap.z[0] + 0.5], [ADDON_DIM.palm.root + 1, ys[1] - 0.5, R.strap.z[1] - 0.5]);

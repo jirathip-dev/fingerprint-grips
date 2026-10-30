@@ -34,7 +34,7 @@ export const ADDON_DIM = {
   // at the bottom). Head and nut sit in pockets open to the outside and the bed; wall = printed
   // material each side of the cut that the bolt clamps.
   joint: { z: 6, pocketW: 9.5, pocketH: 12, wall: 10, headPocket: 38, nutPocket: 12, bolt: 30 },
-  palm: { root: 52, top: 18, arc: 7, hole: 14, drop: 4 }, // solid rest: base, top, rounding. hole = leg-push cord
+  palm: { root: 52, top: 18, arc: 7, hole: 12, drop: 3 }, // solid rest: base, top, rounding. hole = leg-push cord
   // tunnel (closed: the cord can't lift out), its centre `drop` below the cord line so the cord rides its roof on the line
   strap: { w: 27, h: 4.5, z: 14, edge: 3 }, // leg push: slots for a 25 mm strap over the feet (rowing-machine style)
   legAngle: 45, // leg push: design angle of the cord up to your hands (strength screen)

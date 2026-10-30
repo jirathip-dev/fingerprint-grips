@@ -29,7 +29,7 @@ export const FINGERS = ["pinky", "ring", "middle", "index"]; // x order for a ri
 export const DEVICES = {
   fdp: {
     label: "Claw gripper (FDP)",
-    blurb: "Claw grip. Each finger comes up in front of its roller and hooks the tip over it; the pad sits half on the roller, half on a ledge behind it. A roof stops the end joint so the grip can't turn into a crimp, and the back is closed.",
+    blurb: "Claw grip. Each finger comes up in front of its roller and hooks the tip over it, against a back wall that hugs the roller. A roof stops the end joint so the grip can't turn into a crimp, and the back is closed.",
   },
   fds: {
     label: "Pass-through gripper (FDS)",
@@ -86,7 +86,9 @@ export function csBoltFor(w) {
 }
 
 export const DIM = {
-  wall: 5, // divider wall
+  wall: 5, // divider wall. Where the fingers go it is cut back to a round boss round each axle,
+  // bossInset smaller than the roller, so only the rollers touch the fingers (HoG style)
+  bossInset: 1.5,
   slotExtra: 4, // slot width = fingertip width + this
   pinkyExtra: 8, // the pinky rotates out; Open Grips gives it a much wider slot
   rollerSide: 0.5, // roller end clearance each side
@@ -112,8 +114,7 @@ export const DIM = {
     pinkyR: 15, // ... and 30 mm for the pinky
     angle: { index: 57, middle: 60, ring: 60, pinky: 55 }, // fork README "desired angles"
     spine: 10, // solid back behind the ledge: the finger can't go through
-    ledgeDepth: 6, // flat shelf behind the roller, at axle height, up to the back wall
-    ledgeGap: 0.8, // roller to ledge, and roller to the stem under it
+    ledgeGap: 0.8, // roller to the back wall and the cradle under it: almost touching
     stem: 8, // solid under the lowest roller
   },
   fds: {
@@ -190,14 +191,13 @@ export function layout(device, hand, axle = "pin") {
       s.gap = s.f.dipTip / Math.tan(D.angle[s.name] * RAD); // fork: roof height = tip / tan(angle)
       s.zCavTop = s.zTop + s.gap; // roof underside
       s.dip = rollerDip(s.r);
-      s.zLedge = s.zc; // the back wraps the roller in a curve up to its middle (axle height), then a flat shelf
+      s.zLedge = s.zc; // the cradle wraps the roller up to its middle (axle height); above that, the back wall
     }
-    const ref = -Math.max(...slots.map((s) => s.depth + 2 * s.r + D.ledgeGap + D.ledgeDepth + D.spine));
+    const ref = -Math.max(...slots.map((s) => s.depth + 2 * s.r + D.ledgeGap + D.spine));
     for (const s of slots) {
       s.yFront = ref + s.depth;
       s.yc = s.yFront + s.r;
-      s.yLedge = s.yc + s.r + D.ledgeGap; // ledge front face
-      s.yCavBack = s.yLedge + D.ledgeDepth; // back wall: the fingertip stops here
+      s.yCavBack = s.yc + s.r + D.ledgeGap; // back wall at the rims, right behind the roller: the fingertip stops here
       s.roofFront = s.yc - 0.9 * s.f.dipTip - 6; // roof must reach over the end joint
     }
     yF = Math.min(...slots.map((s) => s.roofFront)) - 2;
@@ -270,16 +270,30 @@ export function buildGripper(r, hand, { device = "fdp", side = "right", axle = "
   const body = () =>
     r.drawRoundedRectangle(-L.yF, L.zTop - L.zBottom, DIM.corner).translate([L.yF / 2, (L.zBottom + L.zTop) / 2]);
 
+  // divider walls: cut away where the fingers go, so between the fingers there is only a round
+  // boss round each axle, a bit smaller than the roller. The boss joins the wall that stays
+  // behind and below the axle. FDP: open in front of the axle and over the roller back to the
+  // back wall (the fill's spine behind it carries the load). FDS: the slot is open front to
+  // back, so the wall behind the axle is what joins the rollers to the top; only the front half
+  // is cut.
+  const zone = (s) =>
+    device === "fdp"
+      ? rect(L.yF - 2, s.yc, L.zBottom - 2, s.zCavTop).fuse(rect(s.yc - 0.5, s.yCavBack, s.zLedge, s.zCavTop))
+      : rect(L.yF - 2, s.yc, L.zBottom - 2, s.zRoof);
+  const boss = (s) => r.drawCircle(s.r - DIM.bossInset).translate([s.yc, s.zc]);
+  const wallAt = (x0, nbrs) => {
+    let p = body();
+    for (const s of nbrs) p = p.cut(zone(s));
+    for (const s of nbrs) p = p.fuse(boss(s).intersect(body()));
+    return prism(p, x0, t);
+  };
+
   const cavity = (s) => {
     if (device === "fdp") {
       const D = DIM.fdp;
-      // front: open from below up to the roof, so the finger can come up in front of the roller
-      const front = rect(L.yF - 2, s.yc, L.zBottom - 2, s.zCavTop);
-      // behind and under the roller: a curved cradle that follows the roller (small gap all round)
-      // up to its middle; above that, open back to the back wall over a flat shelf at axle height
-      const cradle = r.drawCircle(s.r + D.ledgeGap).translate([s.yc, s.zc]);
-      const above = rect(s.yc - 0.5, s.yCavBack, s.zLedge, s.zCavTop);
-      return front.fuse(cradle).fuse(above);
+      // front: open from below up to the roof, so the finger can come up in front of the roller.
+      // Behind and under the roller is cut in 3D (spoolCut): it follows the spool.
+      return rect(L.yF - 2, s.yc, L.zBottom - 2, s.zCavTop);
     }
     // open front to back (the fingertips go through), roof above,
     // open below in front of the roller (the finger comes up from there), rail under the back half
@@ -309,18 +323,49 @@ export function buildGripper(r, hand, { device = "fdp", side = "right", axle = "
 
   const parts = [];
   L.slots.forEach((s, i) => {
-    const wall = prism(body(), s.wallX, t);
+    const wall = wallAt(s.wallX, [L.slots[i - 1], s].filter(Boolean));
     let fill = prism(body().cut(cavity(s)), s.xs, s.w);
     if (device === "fds") fill = fill.cut(gable(s));
+    else fill = fill.cut(spoolCut(r, s, L));
     parts.push({ name: `slice_${i + 1}_${s.name}`, kind: "frame", shape: wall.fuse(fill).cut(tools.clone()) });
   });
-  parts.push({ name: "slice_5_end", kind: "frame", shape: prism(body(), L.endX, t).cut(tools.clone()) });
+  parts.push({ name: "slice_5_end", kind: "frame", shape: wallAt(L.endX, [L.slots.at(-1)]).cut(tools.clone()) });
   for (const s of L.slots) parts.push({ name: `roller_${s.name}`, kind: "roller", shape: makeRoller(r, s) });
   tools.delete?.();
 
   let out = parts;
   if (mirrored(side)) out = parts.map((p) => ({ ...p, shape: p.shape.mirror("YZ", [L.width / 2, 0, 0]) }));
   return { parts: out, layout: L, info: summarize(L, side) };
+}
+
+/** Outer radius of a slot's roller at x (layout x), as turned by makeRoller: chamfered ends,
+ *  flat rims, a circular-arc waist. Exported for the checks. */
+export function spoolR(s, x) {
+  const c = DIM.roller.chamfer, e = DIM.roller.rim;
+  const len = s.w - 2 * DIM.rollerSide, R = s.r, u = x - s.xs - DIM.rollerSide;
+  if (u < 0 || u > len) return 0;
+  const v = Math.min(u, len - u);
+  if (v < c) return R - c + v;
+  if (v <= e) return R;
+  const h = len / 2 - e, Ra = (h * h + s.dip * s.dip) / (2 * s.dip);
+  return R - s.dip + Ra - Math.sqrt(Ra * Ra - (u - len / 2) ** 2);
+}
+
+/** FDP: the space behind and under one roller, following the spool shape with the same small
+ *  gap everywhere: rims and waist. Under the axle it is the spool turned round (the cradle);
+ *  above the axle it runs straight up to the roof, so seen from the top the back wall curves
+ *  in at the waist like the roller. */
+function spoolCut(r, s, L) {
+  const g = DIM.fdp.ledgeGap, R = s.r + g, e = DIM.rollerSide + DIM.roller.rim;
+  const x0 = s.xs, x1 = s.xs + s.w, xm = (x0 + x1) / 2;
+  // (x, radius) profile: rims at R, waist arc dipping to R - dip, out past both walls of the slot
+  const prof = (base, top) =>
+    r.draw([x0 - 1, base]).lineTo([x0 - 1, top]).lineTo([x0 + e, top])
+      .threePointsArcTo([x1 - e, top], [xm, top - s.dip])
+      .lineTo([x1 + 1, top]).lineTo([x1 + 1, base]).close();
+  const cradle = prof(0, R).sketchOnPlane("XY").revolve([1, 0, 0], { origin: [0, 0, 0] }).translate([0, s.yc, s.zc]);
+  const above = prof(s.yc - 0.5, s.yc + R).sketchOnPlane("XY", s.zc).extrude(s.zCavTop - s.zc);
+  return cradle.fuse(above);
 }
 
 /** Hole(s) for one roller axle. Pin: blind hole each side. Bolt: countersink cone in the head
@@ -337,6 +382,21 @@ export function axleTool(r, L, s) {
   const tipHole = (face, dir) => r.makeCylinder(DIM.pinHoleR, s.tip + 0.3 + 0.5, [dir > 0 ? face - 0.5 : face - s.tip - 0.3, s.yc, s.zc], [1, 0, 0]);
   const shank = r.makeCylinder(DIM.pinHoleR, s.w + 1, [lo - 0.5, s.yc, s.zc], [1, 0, 0]);
   return s.head === "lo" ? shank.fuse(cone(lo, 1)).fuse(tipHole(hi, 1)) : shank.fuse(cone(hi, -1)).fuse(tipHole(lo, -1));
+}
+
+// Strength screen (hand calc, like the add-ons): 60 kg pulled x 2 safety factor, a quarter per
+// finger. With the walls cut back, the weakest section is level with the finger above each roller:
+// FDP: the fill's spine behind the back wall (slot wide). FDS: the wall behind the axle. Slices
+// print wall face down, so this bending runs along the layers. Guessed PETG limit, not a test.
+export const GRIP_SCREEN = { kg: 60, factor: 2, allow: 20 };
+export function screenGripper(L) {
+  const F = (GRIP_SCREEN.kg * 9.81 * GRIP_SCREEN.factor) / 4;
+  return L.slots.map((s) => {
+    const [b, y0] = L.device === "fdp" ? [s.w, s.yCavBack] : [DIM.wall, s.yc];
+    const d = -y0, e = y0 / 2 - s.yc; // section from y0 to the back face (y = 0); load on the axle
+    const mpa = (6 * F * e) / (b * d * d) + F / (b * d);
+    return { part: `${s.name}: back of the frame beside the finger`, value: round1(mpa), allow: GRIP_SCREEN.allow, unit: "MPa", ok: mpa <= GRIP_SCREEN.allow };
+  });
 }
 
 /** True for the hand whose parts are the mirror image of the layout (pinky at x = 0 is the left hand). */
@@ -412,6 +472,7 @@ function summarize(L, side) {
       rods: L.rods.length,
       boltLength: boltFor(L.width),
     },
+    screen: { kg: GRIP_SCREEN.kg, items: screenGripper(L) },
   };
 }
 
