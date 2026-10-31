@@ -50,9 +50,9 @@ const ADDONS = {
   foot: "A plate for one foot. A cord from each side of your foot meets above it at the Tindeq, so the pull stays centred under that foot. Hang the gripper from the Tindeq's top eye and pull up.",
 };
 const LOAD_TXT = {
-  tindeq: "Tindeq in the bay, its far eye clipped round the bridge in the anchor wall. You read the force in the Tindeq app.",
-  springs: "No Tindeq: the cord goes through the wall to the spring carriage. Marks on the rails show roughly how many kg you're pulling.",
-  both: "Tindeq in the bay, cord on through the wall to the springs. The springs give the resistance and the Tindeq shows the real force live, so you can also check the rail marks.",
+  tindeq: "Tindeq in the bay, its far eye clipped to the cord loop round the carriage at the end. No springs: the carriage sits on its stops. You read the force in the Tindeq app.",
+  springs: "No Tindeq: the cord goes down the bay to the spring carriage at the end. Marks on the rails show roughly how many kg you're pulling.",
+  both: "Tindeq in the bay, its far eye clipped to the carriage loop; the springs sit beside the Tindeq. The springs give the resistance and the Tindeq shows the real force live, so you can also check the rail marks.",
 };
 const BRACE_TXT = {
   palm: "Platform on a table: heel of your hand on the rounded rest, fingers hooked in the gripper.",
@@ -332,33 +332,33 @@ PLATFORM (TINDEQ / SPRINGS / BOTH, PALM OR LEG PUSH)
 ${common}
 Hardware
   ${2 * a.joints} x M5 x 30 mm bolt, washer + nut (joins the parts: one per rail at each joint)
-  Tindeq use: 1 carabiner (or a short loop of cord) from the Tindeq's far eye round the wall bridge
+  Always:     M5 x ${a.guideBolt} mm bolts, a washer each end + a nut (guide bolts: they hold the
+              carriage). 2 for Tindeq only, else one per spring.
+              About 1 m of 5-6 mm cord (the carriage loop), 1 carabiner
   Spring use: 2 or 4 x compression spring, wire ${s.wire} mm, OD ${s.od} mm, free length ${s.length} mm
-              (all the same size)
-              1 x M5 x ${a.guideBolt} mm bolt per spring, 2 washers + 2 nuts each (spring guides)
-              About 1 m of 5-6 mm cord (the carriage loop), 1 carabiner (gripper cord to the loop)
+              (all the same size; inner Ø 10 mm or more, a stop sleeve goes inside each)
   Every bolt is a stock shop length: nothing to cut.
 
 Assembly
   1. Butt the parts together. At each joint, put a bolt through the hole low in each rail,
      head in the pocket on one side, washer + nut in the pocket on the other. Tighten firmly.
   2. Lay the gripper on its back on the two ledges, finger side toward the rest.
-  3. Springs (if used): push a guide bolt through a spring hole of the wall from the Tindeq
-     side, with a nut on the far side to lock it to the wall. Slide on the spring, then the
-     carriage, then washer + nut behind it. 4 springs: all four holes. 2 springs: two opposite
-     corners (top-left + bottom-right), so the pull stays centred.
+  3. Carriage: it goes at the far end, stop sleeves pointing toward you, past the two spring
+     seat blocks. Push a guide bolt (with a washer) from behind through the carriage, through a
+     spring if fitted, and through the seat block; washer + nut on the block's near side.
+     4 springs: all four holes. 2 springs: two opposite corners (top-left + bottom-right), so the
+     pull stays centred. Tindeq only: two bolts, no springs, opposite corners too.
+     Tightening the nuts pre-loads the springs.
 
 Load: pick one, no reprint
-  Tindeq only     cord from the gripper to the Tindeq's near eye; carabiner from its far eye
-                  through the wall window, round the bridge above it.
-  Springs only    the carriage loop (below) comes out of the wall window; clip the gripper
-                  cord to it with a carabiner.
+  Tindeq only     cord from the gripper to the Tindeq's near eye; far eye -> the carriage loop.
+                  No springs: the first pull takes the carriage onto its stops, then it's solid.
+  Springs only    clip the gripper cord to the carriage loop with the carabiner.
   Tindeq+springs  gripper -> Tindeq near eye; far eye -> the carriage loop. The springs give the
                   resistance, the Tindeq reads it.
   Carriage loop   no knot on the carriage. Tie a loop of cord (double fisherman's). Push one end
-                  of the loop through the wall window, through one carriage hole, round the groove
-                  on the back and back out of the other hole and the window: a U round the carriage.
-                  Adjust where the knot sits so it stays in front of the wall, never in a hole.
+                  of the loop through one carriage hole, round the groove on the back and back out
+                  of the other hole: a U round the carriage. Keep the knot out of the holes.
   The Tindeq should hang clear of the floor and the side guides when you pull. Tare it unloaded.
 
 Brace: pick one

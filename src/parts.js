@@ -19,13 +19,12 @@ export function partsFor(info) {
   const a = info.addon;
   if (a?.kind === "platform") {
     out.push(item("M5 × 30 mm bolts", `${2 * a.joints}, with a nut + washer each (join the platform parts)`, "", "M5 x 30 socket head bolt"));
-    if (a.load !== "tindeq") {
-      const s = a.spring;
-      out.push(item(`M5 × ${a.guideBolt} mm bolts`, "2 or 4 (one per spring), 2 nuts + 2 washers each (spring guides)", "", `M5 x ${a.guideBolt} socket head bolt`));
-      out.push(item("Compression springs", `2 or 4 × wire ${s.wire} mm, outer Ø ${s.od} mm, ${s.length} mm long`, "Pick a listing that gives wire, outer Ø and length, then type its numbers into the app. Inner Ø must be over 6 mm (the M5 guide bolt). Small mixed boxes are usually too weak.", `compression spring ${s.wire}mm wire ${s.od}mm OD ${s.length}mm`));
-    }
+    const s = a.spring;
+    out.push(item(`M5 × ${a.guideBolt} mm bolts`, `${a.load === "tindeq" ? "2" : "2 or 4 (one per spring)"}, a nut + 2 washers each (guide bolts: they hold the carriage)`, "", `M5 x ${a.guideBolt} socket head bolt`));
+    if (a.load !== "tindeq")
+      out.push(item("Compression springs", `2 or 4 × wire ${s.wire} mm, outer Ø ${s.od} mm, ${s.length} mm long`, "Pick a listing that gives wire, outer Ø and length, then type its numbers into the app. Inner Ø 10 mm or more (the guide bolt and a printed stop sleeve go inside). Small mixed boxes are usually too weak.", `compression spring ${s.wire}mm wire ${s.od}mm OD ${s.length}mm`));
     if (a.brace === "legs") out.push(item("Strap, 25 mm", "1, about 1 m with a cam or ladder buckle", "Webbing or a luggage strap; it goes through the two slots in the rest and over your feet.", "25mm cam buckle strap"));
-    if (a.load !== "tindeq") out[2].qty = "about 1 m per gripper + 1 m for the carriage loop";
+    out[2].qty = "about 1 m per gripper + 1 m for the carriage loop";
     out.push(item("Carabiner, climbing-rated", "1", "Look for a kN number on the spine. Keyring clips are not rated.", "climbing carabiner kN rated"));
   }
   if (a?.kind === "foot") {

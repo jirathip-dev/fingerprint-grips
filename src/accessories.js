@@ -3,10 +3,14 @@
 //
 //   platform : one rig for a table or the floor (in the spirit of the Crimpdeq platform and
 //              Crimpy). The gripper lies on its back between two rails and the cord runs
-//              straight down the middle: gripper -> Tindeq bay -> anchor wall -> spring section.
+//              straight down the middle: gripper -> Tindeq bay -> spring carriage at the far end.
+//              Compact: the springs sit beside the Tindeq, between a seat block on each rail and
+//              the carriage just past the Tindeq. The carriage is always the anchor (a cord loop
+//              round it, no knot); 4 sleeves on it stop it on the seat blocks at full squeeze.
 //              Load it three ways, all with the same printed parts:
-//                tindeq : Tindeq in the bay, its far eye clipped round the bridge in the wall
-//                springs: cord through the wall to the spring carriage (no Tindeq)
+//                tindeq : Tindeq in the bay, its far eye to the carriage loop; no springs, so the
+//                         carriage sits on its stops
+//                springs: gripper cord straight to the carriage loop (no Tindeq)
 //                both   : Tindeq in the bay AND springs: the Tindeq reads the spring force live
 //              Brace it two ways: heel of the hand on the rest (palm push, on a table), or
 //              feet flat against the rest's front face (leg push, on the floor; the cord
@@ -39,16 +43,18 @@ export const ADDON_DIM = {
   strap: { w: 27, h: 4.5, z: 14, edge: 3 }, // leg push: slots for a 25 mm strap over the feet (rowing-machine style)
   legAngle: 45, // leg push: design angle of the cord up to your hands (strength screen)
   legLift: 150, // preview only: hands this far above the cord line
-  travel: 50, // the cord length sets where the gripper sits: 0-50 mm from the palm rest
+  travel: 30, // the cord length sets where the gripper sits: 0-30 mm from the palm rest
   legReach: 260, // preview only: leg push, gripper this far in front of the rest (in your hands)
   cordGap: 14, // gripper top (at its furthest) to the Tindeq: room for the knot
   maxPiece: 236, // longest printed piece (A1 bed is 256 mm)
-  tindeq: { floor: 6, guideH: 14, guideT: 4, clear: 4, clip: 34 }, // clip = carabiner / short cord to the wall
-  wall: { t: 20, window: 24, over: 14, buttress: 15 }, // anchor wall: carabiner / both cord strands window + bridge above it
-  // carriage cord: a loop through two holes and round a groove on the back (a U, no knot on the
-  // carriage). uDy = hole offset from the cord line, uR = hole radius, loopReach = the loop's
-  // end (where the gripper cord or the Tindeq clips on) in front of the wall.
-  spring: { carriage: 18, preload: 1, uDy: 10, uR: 3.75, groove: 3.4, loopReach: 40, post: 10, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
+  tindeq: { floor: 6, guideH: 14, guideT: 4, clear: 4 },
+  // spring section beside the Tindeq. carriage cord: a loop through two holes and round a groove
+  // on the back (a U, no knot on the carriage); uDy = hole offset from the cord line, uR = hole
+  // radius. blockIn = seat blocks start this far from the cord line (clear of the Tindeq);
+  // block + buttress = seat block thickness along the pull. endGap = Tindeq far end to the
+  // carriage (the loop clips to its far eye). tail = guide bolt head + washer behind the carriage.
+  // sleeveGap = stop sleeve to the spring's inside, all round.
+  spring: { carriage: 18, preload: 1, uDy: 10, uR: 3.75, groove: 3.4, blockIn: 30.5, block: 16, buttress: 15, endGap: 12, tail: 8, sleeveGap: 0.5, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
   foot: { len: 230, width: 160, t: 11, lugL: 70, lugT: 20, holeD: 14, holeZ: 26, over: 18, apex: 250, footW: 110 },
 };
 
@@ -108,7 +114,7 @@ export function validateSpring(sp) {
   if (problems.length) return problems;
   const m = springMath(sp);
   if (m.C < 4 || m.C > 14) problems.push(`That spring is too ${m.C < 4 ? "tight" : "loose"} a coil (OD ÷ wire should be about 5–15). Check the wire and OD.`);
-  if (m.ID < 6) problems.push(`Inner diameter ${m.ID.toFixed(1)} mm is too small for the M5 guide bolt (needs 6 mm or more).`);
+  if (m.ID < 10) problems.push(`Inner diameter ${m.ID.toFixed(1)} mm is too small: an M5 guide bolt and a printed stop sleeve go inside (needs 10 mm or more).`);
   if (Number(sp.coils) - 2 < 2) problems.push("Too few coils: a spring needs at least 4 turns.");
   if (m.travel < 5) problems.push(`That spring only gives ${m.travel.toFixed(1)} mm of travel. Use a longer spring or fewer, thicker coils.`);
   return problems;
@@ -162,10 +168,6 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   R.guideY = [Yc - TINDEQ.width / 2 - T.clear - T.guideT, Yc + TINDEQ.width / 2 + T.clear];
   R.guideTop = Math.max(T.floor + T.guideH, Zc - 4);
 
-  // anchor wall: the window takes the carabiner (Tindeq only) or the cord (springs)
-  R.xW0 = R.xT0 + TINDEQ.length + T.clip;
-  R.xW1 = R.xW0 + A.wall.t;
-  R.window = { y: Yc, z: Zc, r: A.wall.window / 2 };
   // leg push: closed cord tunnel low in the rest + strap slots each side of it
   const P = A.palm, slope = (z) => (z * (P.root - P.top)) / (R.Zp - P.arc); // x of the rest's front face at height z
   const hz = Zc - P.drop, hr = P.hole / 2;
@@ -176,30 +178,38 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   if (R.strap.z[1] > hz - hr - 3) R.problems.push("No room for the strap slots under the leg-push cord hole.");
   if (R.legHole.roof < 6) R.problems.push("The palm rest is too low over the leg-push cord hole.");
 
-  // spring section: always a 2 x 2 block of seats round the window, so the same print takes
-  // 2 or 4 springs. 2 springs go on a diagonal: the load still pulls through the centre.
-  const off = R.window.r + 3 + m.OD / 2;
+  // spring section, beside the Tindeq: the carriage sits just past the Tindeq's far end and
+  // the springs run back from it, a pair each side of the Tindeq, to a seat block on each rail.
+  // The Tindeq and the carriage move together, so the gap between them never changes.
+  // Always a 2 x 2 set of seats, so the same print takes 2 or 4 springs; 2 go on a diagonal.
+  const off = S.blockIn + 3 + m.OD / 2; // spring centre from the cord line
   const dz = m.OD / 2 + 2;
   const ys = [Yc - off, Yc + off];
   const pos = ys.flatMap((y) => [{ y, z: Zc - dz }, { y, z: Zc + dz }]);
   const used = m.count === 4 ? pos : [pos[0], pos[3]];
   R.spring = { ...m, ys, pos, used, rest: m.L0 - S.preload };
-  R.xC0 = R.xW1 + R.spring.rest;
+  R.xC0 = R.xT0 + TINDEQ.length + S.endGap;
   R.xC1 = R.xC0 + S.carriage;
-  R.xEnd = R.xC1 + S.post + 3;
+  R.xEnd = R.xC1 + S.tail;
+  // seat blocks' far face. Each spring sits in a seat recess in the block and in the carriage,
+  // so seat bottom to seat bottom is the spring's preloaded length (rest)
+  R.xS1 = R.xC0 - R.spring.rest + 2 * S.seat;
+  R.xS0 = R.xS1 - S.block;
   R.uY = [Yc - S.uDy, Yc + S.uDy];
-  // where the loop's end sits at rest: in front of the wall (springs), at the Tindeq's far eye (both)
-  R.loopEnd = { springs: R.xW0 - S.loopReach, both: R.xT0 + TINDEQ.length / 2 + TINDEQ.eyePitch / 2 };
-  // posts sit outside the springs (1.5 mm clear), inside the carriage's footprint
-  R.carriageY = [Math.min(...ys) - m.OD / 2 - 1.5 - S.post, Math.max(...ys) + m.OD / 2 + 1.5 + S.post];
+  // where the loop's end sits at rest: in the empty bay (springs only), at the Tindeq's far eye
+  const eye = R.xT0 + TINDEQ.length / 2 + TINDEQ.eyePitch / 2;
+  R.loopEnd = { springs: R.xT0 + 20, both: eye, tindeq: eye };
+  R.carriageY = [Yc - off - m.OD / 2 - 3, Yc + off + m.OD / 2 + 3];
   const zs = pos.map((q) => q.z);
   R.carriageZ = [Math.min(...zs) - m.OD / 2 - 6, Math.max(...zs) + m.OD / 2 + 6];
   if (R.carriageY[0] < -inner + 0.5 || R.carriageY[1] > inner - 0.5)
     R.problems.push(`Those springs are too fat for this platform (${m.OD} mm OD). Use a smaller outer diameter.`);
   if (R.carriageZ[0] < 7) R.problems.push(`Springs of ${m.OD} mm OD don't fit under the cord line (the platform always has room for 4). Use a smaller OD.`);
-  R.postY = [[R.carriageY[0], R.carriageY[0] + S.post], [R.carriageY[1] - S.post, R.carriageY[1]]];
-  R.stopLen = R.spring.rest - m.travel; // wall to the carriage at full squeeze
-  R.wallTop = Math.max(Zc + R.window.r * Math.SQRT2 + A.wall.over, R.carriageZ[1] + 4);
+  // stop sleeves: one inside each spring, on the carriage. At full squeeze (or with no springs,
+  // Tindeq only) they land on the seat blocks, before the springs go solid.
+  R.sleeve = { r: m.ID / 2 - S.sleeveGap, len: R.spring.rest - m.travel };
+  if (R.sleeve.r < S.rodHole + 1.5) R.problems.push(`Springs need an inner Ø of at least ${2 * (S.rodHole + 1.5 + S.sleeveGap)} mm (a stop sleeve goes inside them).`);
+  R.blockTop = Math.max(Zc + dz + m.OD / 2 + 4, A.rail.h);
   // 5 kg marks on the rail tops: where the carriage's front face sits at each load (sight across).
   // One rail is marked for 2 springs, the other for 4. Marks go by position, so they stay right
   // when the springs are pre-tensioned with the nuts.
@@ -215,15 +225,16 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   // joints: the head pocket reaches past the cut, so keep the whole joint inside one open stretch
   const J = A.joint;
   const before = J.wall + J.headPocket + 2, after = J.wall + J.nutPocket + 2;
-  R.cuttable = [[R.xPalm + 5, R.xBayEnd - 5], [R.tindeqRun[0] + 8, R.tindeqRun[1] - 8], [R.xW1 + R.stopLen + 2, R.xC0 - 2]]
+  R.cuttable = [[R.xPalm + 5, R.xBayEnd - 5], [R.tindeqRun[0] + 8, R.xS0 - S.buttress - 2]]
     .map(([a, b]) => [a + before, b - after]).filter(([a, b]) => b > a);
   R.pieces = splitPieces(R.xEnd, R.cuttable, A.maxPiece);
   R.cuts = R.pieces.slice(1).map(([x0]) => x0);
   R.boltY = [-1, 1].map((k) => k * (outer - J.pocketW / 2)); // bolt line, inside each rail
-  // spring guides: M5 bolt, head on the Tindeq side of the wall, through wall + spring + carriage,
-  // then washer + nyloc nut. Shop length: wall to carriage back + washer, nut and 2 threads.
-  R.guideBolt = [60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200].find((n) => n >= R.xC1 - R.xW0 + 8) ?? null;
-  if (!R.guideBolt) R.problems.push(`Those springs are too long for a stock M5 bolt (needs ${Math.ceil(R.xC1 - R.xW0 + 8)} mm). Use shorter springs.`);
+  // spring guides: M5 bolt, head + washer behind the carriage (it holds the carriage at rest),
+  // through carriage + sleeve + spring + seat block, washer + nut on the block's near face
+  // (tighten it to preload). Shop length: carriage back to block front + washer, nut, 2 threads.
+  R.guideBolt = [60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200].find((n) => n >= R.xC1 - R.xS0 + 8) ?? null;
+  if (!R.guideBolt) R.problems.push(`Those springs are too long for a stock M5 bolt (needs ${Math.ceil(R.xC1 - R.xS0 + 8)} mm). Use shorter springs.`);
   R.screen = screenRig(R);
   return R;
 }
@@ -258,7 +269,7 @@ function splitPieces(xEnd, cuttable, maxLen) {
 
 /** Hand-calc stress screen at the design load. Returns [{part, mpa, allow, ok}].
  *  Rated for the Tindeq rating or the full spring load, whichever is higher: once the carriage
- *  hits its stops, the rest of the pull goes straight into the wall. Leg push loads the same
+ *  hits its stops, the rest of the pull goes through the stop sleeves into the seat blocks. Leg push loads the same
  *  path as palm push, but lower down, so the palm case covers it. */
 function screenRig(R) {
   const A = ADDON_DIM;
@@ -303,9 +314,15 @@ function screenRig(R) {
     const arm = Math.abs(R.spring.ys[1] - R.Yc), hC = R.carriageZ[1] - R.carriageZ[0];
     add("carriage bending between the springs", ((F / 2) * arm) / ((hC * d ** 2) / 6), ALLOW.inLayer);
   }
-  const t = A.wall.t + A.wall.buttress;
-  add("anchor wall root", (6 * F * R.Zc) / (b * t * t), ALLOW.acrossLayer);
-  add("bridge over the window", (6 * ((F * A.wall.window) / 8)) / (A.wall.over * A.wall.t ** 2), ALLOW.inLayer);
+  // seat blocks: each takes half the pull at about cord height, pushing toward you. Root =
+  // block + buttress, from the Tindeq side out to the outside of the rail; bends across layers.
+  {
+    const S = A.spring, bB = R.outer - S.blockIn - Math.abs(R.Yc), tB = S.block + S.buttress;
+    add("spring seat blocks root", (6 * (F / 2) * R.Zc) / (bB * tB * tB), ALLOW.acrossLayer);
+    // stops: the carriage lands on its 4 sleeves (printed upright: squeezed along the layers)
+    const As = 4 * Math.PI * (R.sleeve.r ** 2 - S.rodHole ** 2);
+    add("carriage stop sleeves (compression)", F / As, ALLOW.compression);
+  }
   return { kg: round1(kg), forceN: round1(F), items: out };
 }
 
@@ -357,14 +374,12 @@ export function buildRig(r, R) {
   // floor under the Tindeq bay and the spring section ties the rails together
   body = body.fuse(box(r, R.tindeqRun[0] - 4, R.xEnd, -inner - 0.5, inner + 0.5, 0, T.floor));
   // side guides: the Tindeq hangs in line on the cord; they only catch it when it's slack
-  for (const y0 of R.guideY) body = body.fuse(box(r, R.tindeqRun[0] - 4, R.tindeqRun[1] + 4, y0, y0 + T.guideT, T.floor - 0.5, R.guideTop));
-  // anchor wall + buttress in front of it
-  body = body.fuse(box(r, R.xW0, R.xW1, -outer, outer, 0, R.wallTop));
-  body = body.fuse(prismY(poly(r, [[R.xW0 - A.wall.buttress, 0], [R.xW0 + 0.5, 0], [R.xW0 + 0.5, A.wall.buttress]]), -outer, outer));
-  // stop posts (full squeeze) and end posts (rest), standing on the floor
-  for (const [y0, y1] of R.postY) {
-    body = body.fuse(box(r, R.xW1 - 0.5, R.xW1 + R.stopLen, y0, y1, T.floor - 0.5, R.Zc + 6));
-    body = body.fuse(box(r, R.xC1, R.xC1 + S.post, y0, y1, T.floor - 0.5, R.Zc + 6));
+  // (up to the seat blocks; past them the blocks' inner faces do the same job)
+  for (const y0 of R.guideY) body = body.fuse(box(r, R.tindeqRun[0] - 4, R.xS0 + 0.5, y0, y0 + T.guideT, T.floor - 0.5, R.guideTop));
+  // spring seat blocks, one on each rail beside the Tindeq, each with a buttress on its near side
+  for (const [y0, y1] of [[-outer, R.Yc - S.blockIn], [R.Yc + S.blockIn, outer]]) {
+    body = body.fuse(box(r, R.xS0, R.xS1, y0, y1, 0, R.blockTop));
+    body = body.fuse(prismY(poly(r, [[R.xS0 - S.buttress, 0], [R.xS0 + 0.5, 0], [R.xS0 + 0.5, S.buttress]]), y0, y1));
   }
 
   const tools = [];
@@ -375,10 +390,9 @@ export function buildRig(r, R) {
   tools.push(coneX(r, H.xMouth - 2, H.r + 8, H.xMouth + 6, H.r, R.Yc, H.z));
   // strap slots, one each side, front face to back face
   for (const k of [-1, 1]) tools.push(box(r, -1, P.root + 1, k > 0 ? R.strap.y[0] : -R.strap.y[1], k > 0 ? R.strap.y[1] : -R.strap.y[0], R.strap.z[0], R.strap.z[1]));
-  tools.push(prismX(teardrop(r, R.window.y, R.window.z, R.window.r), R.xW0 - 1, R.xW1 + 1));
   for (const { y, z } of sp.pos) {
-    tools.push(prismX(teardrop(r, y, z, S.rodHole), R.xW0 - 1, R.xW1 + 1));
-    tools.push(r.makeCylinder(sp.OD / 2 + 0.6, S.seat + 0.5, [R.xW1 - S.seat, y, z], [1, 0, 0])); // spring seat
+    tools.push(prismX(teardrop(r, y, z, S.rodHole), R.xS0 - 1, R.xS1 + 1));
+    tools.push(r.makeCylinder(sp.OD / 2 + 0.6, S.seat + 0.5, [R.xS1 - S.seat, y, z], [1, 0, 0])); // spring seat
   }
   for (const m of R.marks) {
     const w = m.kg % 10 === 0 ? 2.4 : 1.2;
@@ -411,8 +425,8 @@ export function cordSeg(r, a, b, rad = 2.5) {
   return r.makeCylinder(rad, n, a, d.map((v) => v / n));
 }
 
-/** The carriage loop: from its end (where the gripper cord or the Tindeq clips) out through the
- *  wall window, into one carriage hole, round the groove on the back and out the other: a U.
+/** The carriage loop: from its end (where the gripper cord or the Tindeq's far eye clips) into
+ *  one carriage hole, round the groove on the back and out the other: a U.
  *  `dx` moves the carriage end toward the wall (spring squeeze). Returns cord solids. */
 export function loopCord(r, R, load, dx = 0, rad = 2.5) {
   const xL = R.loopEnd[load] - dx, x0 = R.xC0 - dx, x1 = R.xC1 - dx, z = R.Zc;
@@ -442,9 +456,12 @@ function buildCarriage(r, R) {
     c = c.cut(coneX(r, R.xC1 - 3, S.uR, R.xC1 + 0.5, S.uR + 3.5, y, R.Zc));
   }
   c = c.cut(r.makeCylinder(S.groove, R.uY[1] - R.uY[0], [R.xC1, R.uY[0], R.Zc], [0, 1, 0]));
+  // spring seats, a stop sleeve standing in each (inside the spring), guide bolt hole through
+  const Sv = R.sleeve;
   for (const { y, z } of sp.pos) {
-    c = c.cut(r.makeCylinder(S.rodHole, S.carriage + 2, [R.xC0 - 1, y, z], [1, 0, 0]));
     c = c.cut(r.makeCylinder(sp.OD / 2 + 0.6, S.seat + 0.5, [R.xC0 - 0.5, y, z], [1, 0, 0]));
+    c = c.fuse(r.makeCylinder(Sv.r, Sv.len + 0.2, [R.xC0 + S.seat - Sv.len, y, z], [1, 0, 0])); // tip lands on the block's seat
+    c = c.cut(r.makeCylinder(S.rodHole, S.carriage + Sv.len + 2, [R.xC0 + S.seat - Sv.len - 1, y, z], [1, 0, 0]));
   }
   return c;
 }
@@ -467,7 +484,7 @@ export function buildFoot(r, P = footLayout()) {
 /** Reference-only solids (not printed) for the preview and the checks: the Tindeq and/or
  *  springs + guide rods, depending on how the platform is loaded. */
 export function rigGhosts(r, R, load = "both") {
-  const out = [];
+  const out = [], S = ADDON_DIM.spring;
   if (load !== "springs") {
     const T = TINDEQ;
     const x0 = R.xT0;
@@ -475,13 +492,15 @@ export function rigGhosts(r, R, load = "both") {
     for (const k of [-1, 1]) t = t.cut(r.makeCylinder(T.eyeD / 2, T.thick + 2, [x0 + T.length / 2 + (k * T.eyePitch) / 2, R.Yc, R.Zc - T.thick / 2 - 1], [0, 0, 1]));
     out.push({ name: "tindeq", kind: "ghost", shape: t });
   }
-  if (load !== "tindeq") {
-    const sp = R.spring;
-    for (const { y, z } of sp.used) {
-      const tube = r.makeCylinder(sp.OD / 2, sp.rest, [R.xW1, y, z], [1, 0, 0]).cut(r.makeCylinder(sp.ID / 2, sp.rest + 2, [R.xW1 - 1, y, z], [1, 0, 0]));
+  // guide bolts always hold the carriage (Tindeq only: 2, no springs)
+  const sp = R.spring;
+  for (const { y, z } of sp.used) {
+    if (load !== "tindeq") {
+      const x0 = R.xS1 - S.seat; // seat bottom in the block
+      const tube = r.makeCylinder(sp.OD / 2, sp.rest, [x0, y, z], [1, 0, 0]).cut(r.makeCylinder(sp.ID / 2, sp.rest + 2, [x0 - 1, y, z], [1, 0, 0]));
       out.push({ name: "spring", kind: "spring", shape: tube });
-      out.push({ name: "guide_rod", kind: "steel", shape: r.makeCylinder(2, R.xEnd - R.xW0 + 4, [R.xW0 - 4, y, z], [1, 0, 0]) });
     }
+    out.push({ name: "guide_rod", kind: "steel", shape: r.makeCylinder(2, R.guideBolt, [R.xC1 + 1 - R.guideBolt, y, z], [1, 0, 0]) });
   }
   return out;
 }
@@ -521,7 +540,8 @@ export const massG = (mm3) => Math.round((mm3 / 1000) * 1.27 * 0.55);
 
 /** Rotate an add-on part to its print orientation and drop it onto z = 0. */
 export function printOrientAddon(shape, print) {
-  const s = print === "standing" ? shape.rotate(-90, [0, 0, 0], [0, 1, 0]) : shape;
+  // standing = the carriage on its back face, stop sleeves pointing up
+  const s = print === "standing" ? shape.rotate(90, [0, 0, 0], [0, 1, 0]) : shape;
   const [min] = s.boundingBox.bounds;
   return s.translate([-min[0], -min[1], -min[2]]);
 }

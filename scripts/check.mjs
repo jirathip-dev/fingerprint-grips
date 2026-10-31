@@ -18,10 +18,11 @@
 //      FDS fingertips have room under it
 //  A3. palm rest top is level with the middle finger's way in (+-6 mm); heel and fingers pull in line
 //  A4. one straight cord line from the front of the rest (leg-push hole) through the gripper
-//      position, the Tindeq bay, the wall window and the carriage: nothing printed in its way
+//      position, the Tindeq bay and the carriage: nothing printed in its way
 //  A5. Tindeq: clears every printed part by >= 2 mm over its whole run (it moves with the springs),
-//      never reaches the gripper's knot; side guides; window through the wall, bridge above it
-//  A6. springs: clear the frame, stop posts end the travel before the wire's limit,
+//      never reaches the gripper's knot; side guides; the spring seat blocks beside it
+//  A6. springs (beside the Tindeq): clear the frame and the Tindeq, the carriage's stop sleeves
+//      land on the seat blocks to end the travel before the wire's limit,
 //      rate matches a hand calc, kg marks cut where the maths says
 //  A7. foot plate: room for one foot between two lugs, both lug holes go through with a bridge
 //      above, both cords run free from the holes to the Tindeq eye above the foot
@@ -415,13 +416,18 @@ for (const device of ["fdp", "fds"]) {
     // shortest it can be is the gripper at its furthest to the Tindeq at rest
     if (R.xT0 - R.xBayEnd < KNOT_ROOM) fail(`${tag}: the Tindeq sits too close to the gripper for the knot (${(R.xT0 - R.xBayEnd).toFixed(0)} mm)`);
     for (const y0 of R.guideY) if (!solidAt(rig, [(R.tindeqRun[0] + R.tindeqRun[1]) / 2, y0 + ADDON_DIM.tindeq.guideT / 2, R.guideTop - 2], 0.5)) fail(`${tag}: side guide missing at y=${y0.toFixed(0)}`);
-    if (!airAt(rig, [(R.xW0 + R.xW1) / 2, R.Yc, R.Zc], 1)) fail(`${tag}: no window through the anchor wall`);
-    if (!solidAt(rig, [(R.xW0 + R.xW1) / 2, R.Yc, R.Zc + R.window.r * Math.SQRT2 + ADDON_DIM.wall.over / 2], 1)) fail(`${tag}: no bridge above the wall window`);
+    // compact: the platform ends just past the carriage, and the spring seat blocks sit beside
+    // the Tindeq's run (not behind it), solid each side, clear in the middle
+    if (R.xEnd > R.tindeqRun[1] + ADDON_DIM.spring.endGap + ADDON_DIM.spring.carriage + ADDON_DIM.spring.tail + 0.1) fail(`${tag}: the platform runs on past the carriage`);
+    if (!(R.xS0 > R.tindeqRun[0] && R.xS1 < R.tindeqRun[1])) fail(`${tag}: the spring seat blocks are not beside the Tindeq`);
+    for (const k of [-1, 1]) if (!solidAt(rig, [(R.xS0 + R.xS1) / 2, R.Yc + k * (ADDON_DIM.spring.blockIn + 2), R.Zc], 1)) fail(`${tag}: spring seat block missing (${k > 0 ? "left" : "right"})`);
     // A6
     const sp = R.spring;
     // springs: every seat must take one (2 or 4 fitted on the same print)
     if (sp.pos.length !== 4) fail(`${tag}: the platform has ${sp.pos.length} spring seats, needs 4 (2 or 4 springs, no reprint)`);
-    for (const { y, z } of sp.pos) if (!airAt(rig, [(R.xW0 + R.xW1) / 2, y, z], 0.5)) fail(`${tag}: no guide-rod hole in the wall at y=${y.toFixed(0)} z=${z.toFixed(0)}`);
+    for (const { y, z } of sp.pos) if (!airAt(rig, [(R.xS0 + R.xS1) / 2, y, z], 0.5)) fail(`${tag}: no guide-rod hole in the seat block at y=${y.toFixed(0)} z=${z.toFixed(0)}`);
+    // springs and their seats stay clear of the Tindeq's path (+2 mm), the side guides too
+    for (const { y } of sp.pos) if (Math.abs(y - R.Yc) - sp.OD / 2 < T.width / 2 + 2) fail(`${tag}: a spring is within 2 mm of the Tindeq`);
     const two = SP.count === 2 ? sp.used : [];
     if (two.length && Math.abs(two.reduce((a, q) => a + q.y, 0) / 2 - R.Yc) + Math.abs(two.reduce((a, q) => a + q.z, 0) / 2 - R.Zc) > 0.1) fail(`${tag}: 2 springs don't pull through the cord line (lopsided)`);
     for (const gh of rigGhosts(r, { ...R, spring: { ...sp, used: sp.pos } }, "both").filter((q) => q.kind === "spring")) {
@@ -430,24 +436,32 @@ for (const device of ["fdp", "fds"]) {
     }
     const carriage = parts.find((p) => p.name === "spring_carriage").shape;
     // A6b carriage cord: a U loop, no knot. Two holes through, a groove on the back joining them,
-    // and the loop clears every printed part (window, frame) at rest and at full squeeze.
+    // and the loop clears every printed part at rest and at full squeeze.
     {
       const S = ADDON_DIM.spring;
       for (const y of R.uY) if (!airAt(carriage, [(R.xC0 + R.xC1) / 2, y, R.Zc], 2.4)) fail(`${tag}: carriage cord hole missing at y=${y.toFixed(0)}`);
       if (!airAt(carriage, [R.xC1 - 1, R.Yc, R.Zc], 2)) fail(`${tag}: no groove on the back of the carriage for the cord loop`);
       if (!solidAt(carriage, [R.xC0 + 2, R.Yc, R.Zc], 1)) fail(`${tag}: no web between the carriage cord holes (the loop would pull through)`);
       if (!solidAt(carriage, [R.xC0 + 3, R.Yc, R.Zc + S.uR + 2], 0.8)) fail(`${tag}: the carriage web is not joined to the top`);
-      for (const load of ["springs", "both"])
+      for (const load of ["springs", "both", "tindeq"])
         for (const dx of [0, sp.travel]) {
           const hit = loopCord(r, R, load, dx, 2.4).reduce((a, s) => a + common(rig, s) + common(carriage.clone().translate([-dx, 0, 0]), s), 0);
           if (hit > 1) fail(`${tag}: ${load} carriage loop rubs a printed part at ${dx ? "full squeeze" : "rest"} (${hit.toFixed(0)} mm3)`);
         }
-      if (R.loopEnd.springs > R.xW0 - 10) fail(`${tag}: the carriage loop doesn't reach out of the wall`);
+      for (const load of ["springs", "both", "tindeq"]) if (!(R.loopEnd[load] < R.xC0 - 10)) fail(`${tag}: ${load}: the carriage loop doesn't reach out in front of the carriage`);
+      // the Tindeq's far eye clips the loop: room for it between the Tindeq and the carriage
+      if (R.xC0 - R.tindeqRun[1] < 8) fail(`${tag}: no room for the loop between the Tindeq and the carriage`);
     }
     if (common(rig, carriage) > 0.5) fail(`${tag}: the carriage clashes with the frame at rest`);
     if (R.carriageY[0] < -R.inner + 0.5 || R.carriageY[1] > R.inner - 0.5) fail(`${tag}: carriage is wider than the gap between the rails`);
     if (common(rig, carriage.clone().translate([-sp.travel, 0, 0])) > 0.5) fail(`${tag}: carriage runs into the frame before full travel`);
     if (common(rig, carriage.clone().translate([-sp.travel - 1, 0, 0])) < 5) fail(`${tag}: nothing stops the carriage at full travel (springs could be overloaded)`);
+    // the stops are the 4 sleeves (one inside each spring), never the springs themselves
+    for (const { y, z } of sp.pos) {
+      const tip = R.xC0 + ADDON_DIM.spring.seat - R.sleeve.len;
+      if (!solidAt(carriage, [tip + 1, y + (R.sleeve.r + ADDON_DIM.spring.rodHole) / 2, z], 0.4)) fail(`${tag}: no stop sleeve inside the spring at y=${y.toFixed(0)} z=${z.toFixed(0)}`);
+      if (R.sleeve.r > sp.ID / 2 - 0.3) fail(`${tag}: stop sleeve rubs the inside of the spring`);
+    }
     const hand = (79300 * 2 ** 4) / (8 * 14 ** 3 * 6); // 2 mm wire, 16 OD, 8 coils: k by hand
     if (Math.abs(m.k - hand) > 0.01) fail(`${tag}: spring rate ${m.k.toFixed(3)} != hand calc ${hand.toFixed(3)} N/mm`);
     if (m.travel > m.L0 - 1 - m.solid - ADDON_DIM.spring.preload + 1e-9) fail(`${tag}: travel would take the spring solid`);
@@ -468,9 +482,9 @@ for (const device of ["fdp", "fds"]) {
     // joints: every cut has an M5 bolt low in each rail, head + nut pockets clear, solid wall clamped
     const J = ADDON_DIM.joint;
     if (R.cuts.length !== parts.filter((p) => p.name.startsWith("platform_")).length - 1) fail(`${tag}: ${R.cuts.length} joints for ${parts.length - 1} platform pieces`);
-    // joints (bolt, head pocket, nut pocket) must stay clear of the palm rest, the anchor wall with
-    // its buttress and stop posts, and the end posts: pockets there would weaken them
-    const solidZones = [[-1, R.xPalm + ADDON_DIM.palm.root], [R.xW0 - ADDON_DIM.wall.buttress, R.xW1 + R.stopLen], [R.xC1, R.xEnd + 1]];
+    // joints (bolt, head pocket, nut pocket) must stay clear of the palm rest and the spring seat
+    // blocks with their buttresses: pockets there would weaken them
+    const solidZones = [[-1, R.xPalm + ADDON_DIM.palm.root], [R.xS0 - ADDON_DIM.spring.buttress, R.xEnd + 1]];
     for (const xc of R.cuts) {
       const j0 = xc - J.wall - J.headPocket, j1 = xc + J.wall + J.nutPocket;
       for (const [a, b] of solidZones) if (j0 < b && j1 > a) fail(`${tag}: joint at x=${xc.toFixed(0)} cuts into a solid section (${a.toFixed(0)}-${b.toFixed(0)})`);
@@ -487,7 +501,7 @@ for (const device of ["fdp", "fds"]) {
     // spring guide: stock bolt, reaches through wall + spring + carriage with room for the nut
     {
       if (![60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200].includes(R.guideBolt)) fail(`${tag}: spring guide bolt ${R.guideBolt} mm is not a stock length`);
-      else if (R.guideBolt < R.xC1 - R.xW0 + 8) fail(`${tag}: spring guide bolt ${R.guideBolt} mm can't reach past the carriage`);
+      else if (R.guideBolt < R.xC1 - R.xS0 + 8) fail(`${tag}: spring guide bolt ${R.guideBolt} mm can't reach from the carriage through the seat block`);
     }
     if (R.screen.kg + 0.05 < springMath({ ...SP, count: 4 }).totalKg) fail(`${tag}: strength screen ignores the 4-spring load (${R.screen.kg} kg)`);
     // A8
