@@ -1,12 +1,14 @@
 // Add-ons that turn a gripper into a trainer. Pure geometry + maths, shared by the
 // browser worker and the Node checks (replicad is passed in, like model.js).
+import { PRINT, WALL, SKIN, TIE, shell, shellSection } from "./print.js";
 //
 //   platform : one rig for a table or the floor (in the spirit of the Crimpdeq platform and
 //              Crimpy). The gripper lies on its back between two rails and the cord runs
 //              straight down the middle: gripper -> Tindeq bay -> spring carriage at the far end.
 //              Compact: the springs sit beside the Tindeq, between a seat block on each rail and
 //              the carriage just past the Tindeq. The carriage is always the anchor (a cord loop
-//              round it, no knot); 4 sleeves on it stop it on the seat blocks at full squeeze.
+//              round it, no knot); a printed stop sleeve on each guide bolt stops it on the seat
+//              blocks at full squeeze.
 //              Load it three ways, all with the same printed parts:
 //                tindeq : Tindeq in the bay, its far eye to the carriage loop; no springs, so the
 //                         carriage sits on its stops
@@ -38,7 +40,7 @@ export const ADDON_DIM = {
   // at the bottom). Head and nut sit in pockets open to the outside and the bed; wall = printed
   // material each side of the cut that the bolt clamps.
   joint: { z: 6, pocketW: 9.5, pocketH: 12, wall: 10, headPocket: 38, nutPocket: 12, bolt: 30 },
-  palm: { root: 38, top: 18, arc: 7, hole: 12, drop: 3 }, // solid rest: base, top, rounding. hole = leg-push cord
+  palm: { root: 38, top: 18, arc: 7, hole: 12, drop: 3, pins: 2 }, // pins = tie pins along the leg-hole roof, per row // solid rest: base, top, rounding. hole = leg-push cord
   // tunnel (closed: the cord can't lift out), its centre `drop` below the cord line so the cord rides its roof on the line
   strap: { w: 27, h: 4.5, z: 14, edge: 3 }, // leg push: slots for a 25 mm strap over the feet (rowing-machine style)
   legAngle: 45, // leg push: design angle of the cord up to your hands (strength screen)
@@ -52,13 +54,13 @@ export const ADDON_DIM = {
   // cord and an edge strip along each side guide, so the Tindeq always rests on solid floor;
   // ribs keep the rails tied together; none within cutClear of a joint.
   windows: { len: 40, rib: 8, edge: 3, spine: 8, cutClear: 14 },
-  // spring section beside the Tindeq. carriage cord: a loop through two holes and round a groove
-  // on the back (a U, no knot on the carriage); uDy = hole offset from the cord line, uR = hole
-  // radius. blockIn = seat blocks start this far from the cord line (clear of the Tindeq);
+  // spring section beside the Tindeq. carriage cord: a loop through two holes (one above the cord
+  // line, one below) and round a groove up the back (a U, no knot on the carriage); uDy = hole
+  // offset from the cord line, uR = hole radius. blockIn = seat blocks start this far from the cord line (clear of the Tindeq);
   // block + buttress = seat block thickness along the pull. endGap = Tindeq far end to the
   // carriage (the loop clips to its far eye). tail = guide bolt head + washer behind the carriage.
   // sleeveGap = stop sleeve to the spring's inside, all round.
-  spring: { carriage: 18, preload: 1, uDy: 10, uR: 3.75, groove: 3.4, blockIn: 30.5, block: 12, buttress: 15, endGap: 10, tail: 7, sleeveGap: 0.5, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
+  spring: { carriage: 24, preload: 1, uDy: 10, uR: 3.75, groove: 3.4, blockIn: 30.5, block: 12, buttress: 15, endGap: 10, tail: 7, sleeveGap: 0.5, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
   foot: { len: 230, width: 160, t: 11, lugL: 70, lugT: 20, holeD: 14, holeZ: 26, over: 18, apex: 250, footW: 110 },
 };
 
@@ -67,8 +69,12 @@ export const LOADS = ["tindeq", "springs", "both"];
 /** Loads the printed add-ons are screened for. Paper check only, not a tested rating. */
 export const RATING = { platform: 60, foot: 100 }; // kg
 export const DESIGN_FACTOR = 2;
-/** Allowable stress for PETG prints (MPa). Assumptions: they need coupon tests. */
-export const ALLOW = { inLayer: 20, acrossLayer: 6, compression: 25, boltN: 4000 /* M5 8.8, about half proof */ };
+/** Allowable stress for PETG prints (MPa). Assumptions: they need coupon tests. Checked against
+ *  maker data (hermes-brain research fdm-print-weight-strength-optimisation): in-layer bending
+ *  64-75 MPa measured, across layers 18-35 MPa tensile (as low as 4.8 untuned). Compression
+ *  measured 20-22 MPa in one study, 63-69 in another, so 20. In-plane shear = half the in-layer
+ *  limit (Tresca). The screens count only the printed shell (walls + top/bottom), see print.js. */
+export const ALLOW = { inLayer: 20, shear: 10, acrossLayer: 6, compression: 20, boltN: 4000 /* M5 8.8, about half proof */ };
 
 // ---------------------------------------------------------------- springs
 export const SPRING_FIELDS = {
@@ -177,6 +183,15 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   const hz = Zc - P.drop, hr = P.hole / 2;
   R.legHole = { z: hz, r: hr, xMouth: slope(hz + hr), roof: round1(R.Zp - P.arc / 2 - (hz + hr * Math.SQRT2)) };
   R.legHole.len = P.root - R.legHole.xMouth;
+  // "perimeter pins": thin blind holes from the bed up through the tunnel into its roof, stopping
+  // under the top skin. The slicer walls each one, so solid columns tie the roof's top and bottom
+  // layers together (a sparse-infill roof would shear between them). No slicer settings needed.
+  // Two rows, over the hole's sides, so the columns cover the whole span.
+  {
+    const H = R.legHole, n = P.pins, pitch = H.len / n;
+    H.pins = Array.from({ length: n }, (_, i) => H.xMouth + pitch * (i + 0.5)).flatMap((x) => [-1, 1].map((k) => ({ x, y: R.Yc + k * hr * 0.6 })));
+    H.pinTop = H.z + hr * Math.SQRT2 + H.roof - SKIN - 0.5;
+  }
   const St = A.strap;
   R.strap = { y: [inner - St.edge - St.w, inner - St.edge], z: [St.z, St.z + St.h], xFront: slope(St.z + St.h) };
   if (R.strap.z[1] > hz - hr - 3) R.problems.push("No room for the strap slots under the leg-push cord hole.");
@@ -199,7 +214,7 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   // so seat bottom to seat bottom is the spring's preloaded length (rest)
   R.xS1 = R.xC0 - R.spring.rest + 2 * S.seat;
   R.xS0 = R.xS1 - S.block;
-  R.uY = [Yc - S.uDy, Yc + S.uDy];
+  R.uZ = [Zc - S.uDy, Zc + S.uDy]; // carriage cord holes, above and below the cord line
   // where the loop's end sits at rest: in the empty bay (springs only), at the Tindeq's far eye
   const eye = R.xT0 + TINDEQ.length / 2 + TINDEQ.eyePitch / 2;
   R.loopEnd = { springs: R.xT0 + 20, both: eye, tindeq: eye };
@@ -209,11 +224,20 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   if (R.carriageY[0] < -inner + 0.5 || R.carriageY[1] > inner - 0.5)
     R.problems.push(`Those springs are too fat for this platform (${m.OD} mm OD). Use a smaller outer diameter.`);
   if (R.carriageZ[0] < 7) R.problems.push(`Springs of ${m.OD} mm OD don't fit under the cord line (the platform always has room for 4). Use a smaller OD.`);
-  // stop sleeves: one inside each spring, on the carriage. At full squeeze (or with no springs,
-  // Tindeq only) they land on the seat blocks, before the springs go solid.
+  // stop sleeves: a printed tube on each guide bolt, inside the spring, from the carriage's seat
+  // to just short of the block's. At full squeeze (or with no springs, Tindeq only) the carriage
+  // lands on them, before the springs go solid.
   R.sleeve = { r: m.ID / 2 - S.sleeveGap, len: R.spring.rest - m.travel };
   if (R.sleeve.r < S.rodHole + 1.5) R.problems.push(`Springs need an inner Ø of at least ${2 * (S.rodHole + 1.5 + S.sleeveGap)} mm (a stop sleeve goes inside them).`);
   R.blockTop = Math.max(Zc + dz + m.OD / 2 + 4, A.rail.h);
+  // tie pins in each seat block, a row along its middle, under the guide bolt holes: the block's
+  // root bends across the layers, so it prints solid there
+  {
+    const xm = R.xS1 - S.block / 2, zTop = Math.min(...pos.map((q) => q.z)) - S.rodHole - 1.5;
+    R.blockPins = { z: [SKIN + 0.5, zTop], at: [] };
+    for (const [y0, y1] of [[-outer, Yc - S.blockIn], [Yc + S.blockIn, outer]])
+      for (let y = y0 + WALL + TIE.r + 0.5; y < y1 - WALL - TIE.r - 0.4; y += TIE.pitch) R.blockPins.at.push({ x: xm, y });
+  }
   // 5 kg marks on the rail tops: where the carriage's front face sits at each load (sight across).
   // One rail is marked for 2 springs, the other for 4. Marks go by position, so they stay right
   // when the springs are pre-tensioned with the nuts.
@@ -235,6 +259,16 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   R.cuts = R.pieces.slice(1).map(([x0]) => x0);
   R.boltY = [-1, 1].map((k) => k * (outer - J.pocketW / 2)); // bolt line, inside each rail
   R.windows = floorWindows(R);
+  // tie pins over each joint, both pieces, from the head pocket to the end of the nut pocket:
+  // two rows along each rail, close enough that their walls merge, so the rail above the pockets
+  // (the bolt's pull, the joint faces pressing, the notched section) prints solid
+  R.jointPins = [];
+  for (const xc of R.cuts) {
+    const x0 = xc - J.wall - J.headPocket + TIE.pitch / 2, x1 = xc + J.wall + J.nutPocket;
+    for (let x = x0; x < x1; x += TIE.pitch)
+      if (Math.abs(x - xc) > TIE.r + 1) for (const k of [-1, 1]) for (const j of [-1, 1]) R.jointPins.push({ x, y: k * (outer - A.rail.w / 2) + j * 3.2 });
+  }
+  R.jointPinZ = [J.pocketH + 0.5, A.rail.h - SKIN - 0.5];
   // spring guides: M5 bolt, head + washer behind the carriage (it holds the carriage at rest),
   // through carriage + sleeve + spring + seat block, washer + nut on the block's near face
   // (tighten it to preload). Shop length: carriage back to block front + washer, nut, 2 threads.
@@ -318,49 +352,67 @@ function screenRig(R) {
   const zLoad = Math.max(R.Zc, R.Zp);
   const out = [];
   const add = (part, mpa, allow, unit = "MPa") => out.push({ part, value: round1(mpa), allow, unit, ok: mpa <= allow });
+  // Sections count only the printed shell: WALL on faces that print upright, SKIN on faces that
+  // print flat (the platform prints flat: rail sides are walls, tops and bottoms skins).
   const w = A.rail.w, h = A.rail.h;
-  add("rails (bending)", (F * (zLoad - h / 2)) / ((2 * w * h * h) / 6) + F / (2 * w * h), ALLOW.inLayer);
-  // rail at a bolt pocket: the pocket takes a corner out of the section
+  const rail = shell(w, h, WALL, SKIN);
+  add("rails (bending)", (F * (zLoad - h / 2)) / (2 * rail.Z) + F / (2 * rail.A), ALLOW.inLayer);
+  // rail at a bolt pocket: the pocket takes a corner out of the section (and gets walls of its own)
   const J = A.joint, pw = J.pocketW, ph = J.pocketH;
-  const Ap = (w - pw) * ph + w * (h - ph);
-  const zp = ((w - pw) * ph * (ph / 2) + w * (h - ph) * ((h + ph) / 2)) / Ap;
-  const Ip = ((w - pw) * ph ** 3) / 12 + (w - pw) * ph * (ph / 2 - zp) ** 2 + (w * (h - ph) ** 3) / 12 + w * (h - ph) * ((h + ph) / 2 - zp) ** 2;
-  add("rails at the bolt pockets", ((F / 2) * (zLoad - zp) * zp) / Ip + F / 2 / Ap, ALLOW.inLayer);
-  // joint: pressed together at the top, held by the bolt at the bottom
+  const P = shellSection([[0, w - pw, 0, ph], [0, w, ph, h]], WALL, SKIN, 0.1, R.jointPins.length ? [[0, w, ph, h]] : []);
+  add("rails at the bolt pockets", ((F / 2) * (zLoad - P.vc) * P.c) / P.I + F / 2 / P.A, ALLOW.inLayer);
+  // joint: pressed together at the top, held by the bolt at the bottom. Contact = the shell in
+  // the top c of the rail end (top skin, then the two side walls)
   const c = 0.6 * (h - J.z);
   const C = ((F / 2) * (zLoad - J.z)) / (h - c / 3 - J.z);
   add("joint bolt pull (each)", C - F / 2, ALLOW.boltN, "N");
-  add("joint top (compression)", (2 * C) / (w * c), ALLOW.compression);
+  // contact = the shell in the top c of the rail end; tie pins there fill it in
+  const tied = R.jointPins.length ? 2 * TIE.col : 0;
+  const Ac = w * Math.min(c, SKIN) + Math.min(w, 2 * WALL + tied) * Math.max(0, c - SKIN);
+  add("joint top (compression)", (2 * C) / Ac, ALLOW.compression);
+  // palm rest root: two halves either side of the leg-push hole, walls all round each
   const b = 2 * R.outer;
-  add("palm rest root", (6 * F * R.Zp) / ((b - A.palm.hole) * A.palm.root ** 2), ALLOW.acrossLayer);
+  const half = shell((b - A.palm.hole) / 2, A.palm.root, WALL, WALL);
+  add("palm rest root", (F * R.Zp) / (2 * half.Z), ALLOW.acrossLayer);
   // leg push: the cord rises to your hands and presses up on the tunnel roof. Roof = a beam
   // across the hole, as long as the tunnel, thickness at the middle of the rounded top.
   {
+    // Top and bottom of the roof print flat (skins), its ends upright (walls).
     const H = R.legHole, up = F * Math.sin((A.legAngle * Math.PI) / 180);
-    add("leg-push hole roof (bending)", (6 * ((up * 2 * H.r) / 4)) / (H.len * H.roof ** 2), ALLOW.inLayer);
-    add("leg-push hole roof (layer shear)", (1.5 * (up / 2)) / (H.len * H.roof), ALLOW.acrossLayer);
+    const roof = shell(H.len, H.roof, WALL, SKIN);
+    add("leg-push hole roof (bending)", (up * 2 * H.r) / 4 / roof.Z, ALLOW.inLayer);
+    // tie pins along the roof make solid columns between its top and bottom skins
+    const nx = new Set(H.pins.map((p) => p.x)).size;
+    add("leg-push hole roof (layer shear)", roof.shear(up / 2, roof.t + nx * TIE.col), ALLOW.acrossLayer);
   }
-  // carriage: the cord loop pulls the web between its two holes forward, a beam over the
-  // holes; the carriage prints standing, so this bends along the layers
+  // carriage: the cord loop pulls the web between its two holes forward. The carriage prints
+  // lying as it sits (holes above and below each other, layers flat), so the pull, the web's
+  // bending and its shear all run along the layers. Web = the strip between the holes, width
+  // across the layers, held at both sides; its top and bottom are hole bores (skins), front and
+  // back upright faces (walls).
   {
-    // web = the strip between the two holes; it spans the hole height (top and bottom are the
-    // full carriage). The carriage prints standing (layers across the pull), so its shear runs
-    // across the layers: the tightest item, kept under the across-layer limit.
     const S = A.spring, web = 2 * (S.uDy - S.uR), d = S.carriage - S.groove, span = 2 * S.uR;
-    add("carriage web between the cord holes (bending)", (6 * ((F * span) / 8)) / (web * d ** 2), ALLOW.inLayer);
-    add("carriage web (layer shear)", (1.5 * (F / 2)) / (web * d), ALLOW.acrossLayer);
+    const W = shell(web, d, SKIN, WALL);
+    add("carriage web between the cord holes (bending)", (F * span) / 8 / W.Z, ALLOW.inLayer);
+    add("carriage web (shear)", W.shear(F / 2), ALLOW.shear);
     add("carriage web (cord pressing on it)", F / (web * 6), ALLOW.compression);
-    // whole carriage: pulled in the middle, held by the springs out to each side
-    const arm = Math.abs(R.spring.ys[1] - R.Yc), hC = R.carriageZ[1] - R.carriageZ[0];
-    add("carriage bending between the springs", ((F / 2) * arm) / ((hC * d ** 2) / 6), ALLOW.inLayer);
+    // whole carriage: pulled in the middle, held by the springs out to each side. Section at the
+    // middle, through both cord holes: u = height (skins on flat faces), v = depth (walls).
+    const arm = Math.abs(R.spring.ys[1] - R.Yc), [z0, z1] = R.carriageZ, [h0, h1] = R.uZ.map((z) => [z - S.uR, z + S.uR]);
+    const M = shellSection([[z0, h0[0], 0, d], [h0[1], h1[0], 0, d], [h1[1], z1, 0, d]], SKIN, WALL);
+    add("carriage bending between the springs", ((F / 2) * arm * M.c) / M.I, ALLOW.inLayer);
   }
   // seat blocks: each takes half the pull at about cord height, pushing toward you. Root =
   // block + buttress, from the Tindeq side out to the outside of the rail; bends across layers.
   {
+    // plan section at the root, across the pull: buttress shell + block (solid with its tie pins).
+    // Bent toward you, so the block's far face is in tension.
     const S = A.spring, bB = R.outer - S.blockIn - Math.abs(R.Yc), tB = S.block + S.buttress;
-    add("spring seat blocks root", (6 * (F / 2) * R.Zc) / (bB * tB * tB), ALLOW.acrossLayer);
-    // stops: the carriage lands on its 4 sleeves (printed upright: squeezed along the layers)
-    const As = 4 * Math.PI * (R.sleeve.r ** 2 - S.rodHole ** 2);
+    const root = shellSection([[0, bB, 0, tB]], WALL, WALL, 0.1, R.blockPins.at.length ? [[0, bB, S.buttress, tB]] : []);
+    add("spring seat blocks root", ((F / 2) * R.Zc * (tB - root.vc)) / root.I, ALLOW.acrossLayer);
+    // stops: the carriage lands on the sleeves, 2 with 2 springs or Tindeq only (printed
+    // standing, squeezed across the layers: compression barely cares which way)
+    const As = 2 * Math.PI * (R.sleeve.r ** 2 - S.rodHole ** 2);
     add("carriage stop sleeves (compression)", F / As, ALLOW.compression);
   }
   return { kg: round1(kg), forceN: round1(F), items: out };
@@ -386,14 +438,20 @@ export function footLayout() {
   // Smooth solid plate. Effective width: the lug plus a 45° spread.
   const lever = yLug - 25;
   const beff = Math.min(P.len, P.lugL + 2 * lever);
-  const I = (beff * P.t ** 3) / 12;
-  const cMax = P.t / 2;
-  add("plate bending (between the lugs)", (Pv * lever * cMax) / I, ALLOW.inLayer);
-  add("lug legs (across layers)", Pv / (2 * P.lugT * (P.lugL / 2 - P.holeD / 2)), ALLOW.acrossLayer);
-  add("lug root (pull + sideways)", Pv / (P.lugL * P.lugT) + (6 * Ph * P.holeZ) / (P.lugL * P.lugT ** 2), ALLOW.acrossLayer);
-  add("bridge over the hole (bending)", (6 * ((Pc * P.holeD) / 8)) / (P.lugT * P.over ** 2), ALLOW.inLayer);
-  add("bridge over the hole (layer shear)", (1.5 * (Pc / 2)) / (P.lugT * P.over), ALLOW.acrossLayer);
-  return { ...P, yLug, gap, ribTop, zHole, lugTop, screen: { kg: RATING.foot, forceN: round1(F), items }, pieces: [[0, P.len]] };
+  // printed shell only (print.js): the plate prints flat (top/bottom skins), the lugs stand up
+  // (walls round them, skins only at the top)
+  const plate = shell(beff, P.t, WALL, SKIN);
+  add("plate bending (between the lugs)", (Pv * lever) / plate.Z, ALLOW.inLayer);
+  const legW = P.lugL / 2 - P.holeD / 2, legA = shell(legW, P.lugT, WALL, WALL).A;
+  add("lug legs (across layers)", Pv / (2 * legA), ALLOW.acrossLayer);
+  const root = shell(P.lugL, P.lugT, WALL, WALL);
+  add("lug root (pull + sideways)", Pv / root.A + (Ph * P.holeZ) / root.Z, ALLOW.acrossLayer);
+  // bridge: tie pins (2 x 2) stand in it over the hole, so it prints nearly solid
+  const br = shell(P.lugT, P.over, WALL, WALL);
+  const bridgePins = [-1, 1].flatMap((i) => [-1, 1].map((j) => ({ dx: i * 3.2, dy: j * 3.9 })));
+  add("bridge over the hole (bending)", (Pc * P.holeD) / 8 / br.Z, ALLOW.inLayer);
+  add("bridge over the hole (layer shear)", br.shear(Pc / 2, br.t + 2 * TIE.col), ALLOW.acrossLayer);
+  return { ...P, yLug, gap, ribTop, zHole, lugTop, bridgePins, screen: { kg: RATING.foot, forceN: round1(F), items }, pieces: [[0, P.len]] };
 }
 
 // ---------------------------------------------------------------- solids
@@ -439,6 +497,10 @@ export function buildRig(r, R) {
     tools.push(box(r, m.x - w / 2, m.x + w / 2, m.rail > 0 ? inner : -outer, m.rail > 0 ? outer : -inner, A.rail.h - 1.2, A.rail.h + 1));
   }
   for (const w of R.windows) tools.push(box(r, w.x0, w.x1, w.y0, w.y1, -1, T.floor + 0.5));
+  // tie pins: dozens of small holes, none touching another, so they go in as one compound cut
+  const pins = [];
+  for (const p of R.blockPins.at) pins.push(r.makeCylinder(TIE.r, R.blockPins.z[1] - R.blockPins.z[0], [p.x, p.y, R.blockPins.z[0]], [0, 0, 1]));
+  for (const p of R.jointPins) pins.push(r.makeCylinder(TIE.r, R.jointPinZ[1] - R.jointPinZ[0], [p.x, p.y, R.jointPinZ[0]], [0, 0, 1]));
   // joint bolts: hole across each cut, head pocket on the near piece, nut pocket on the far one
   const J = A.joint;
   for (const xc of R.cuts)
@@ -448,6 +510,8 @@ export function buildRig(r, R) {
       tools.push(box(r, xc - J.wall - J.headPocket, xc - J.wall, Math.min(yo, yi) - (k < 0 ? 1 : 0), Math.max(yo, yi) + (k > 0 ? 1 : 0), -1, J.pocketH));
       tools.push(box(r, xc + J.wall, xc + J.wall + J.nutPocket, Math.min(yo, yi) - (k < 0 ? 1 : 0), Math.max(yo, yi) + (k > 0 ? 1 : 0), -1, J.pocketH));
     }
+  for (const p of H.pins) pins.push(r.makeCylinder(TIE.r, H.pinTop - H.z, [p.x, p.y, H.z], [0, 0, 1]));
+  tools.push(r.makeCompound(pins));
   for (const t of tools) body = body.cut(t);
 
   const parts = R.pieces.map(([x0, x1], i) => ({
@@ -456,7 +520,9 @@ export function buildRig(r, R) {
     print: "flat",
     shape: body.clone().intersect(box(r, x0, x1, -outer - 1, outer + 1, -1, 500)),
   }));
-  parts.push({ name: "spring_carriage", kind: "addon", print: "standing", shape: buildCarriage(r, R) });
+  parts.push({ name: "spring_carriage", kind: "addon", print: "flat", shape: buildCarriage(r, R) });
+  // print 4 (a spare pair for 2 springs / Tindeq only); shown on every seat
+  parts.push({ name: "stop_sleeves_x4", kind: "addon", print: "standing", shape: buildSleeves(r, R).reduce((a, s) => a.fuse(s)) });
   return parts;
 }
 
@@ -472,11 +538,11 @@ export function cordSeg(r, a, b, rad = 2.5) {
 export function loopCord(r, R, load, dx = 0, rad = 2.5) {
   const xL = R.loopEnd[load] - dx, x0 = R.xC0 - dx, x1 = R.xC1 - dx, z = R.Zc;
   const out = [];
-  for (const y of R.uY) {
-    out.push(cordSeg(r, [xL, R.Yc, z], [x0, y, z], rad));
-    out.push(cordSeg(r, [x0, y, z], [x1 + 0.5, y, z], rad));
+  for (const zh of R.uZ) {
+    out.push(cordSeg(r, [xL, R.Yc, z], [x0, R.Yc, zh], rad));
+    out.push(cordSeg(r, [x0, R.Yc, zh], [x1 + 0.5, R.Yc, zh], rad));
   }
-  out.push(cordSeg(r, [x1 + 0.5, R.uY[0] - rad, z], [x1 + 0.5, R.uY[1] + rad, z], rad));
+  out.push(cordSeg(r, [x1 + 0.5, R.Yc, R.uZ[0] - rad], [x1 + 0.5, R.Yc, R.uZ[1] + rad], rad));
   return out;
 }
 
@@ -489,22 +555,29 @@ function coneX(r, x0, r0, x1, r1, y, z) {
 function buildCarriage(r, R) {
   const S = ADDON_DIM.spring, sp = R.spring;
   let c = box(r, R.xC0, R.xC1, R.carriageY[0], R.carriageY[1], R.carriageZ[0], R.carriageZ[1]);
-  // cord loop: in one hole, round the groove on the back, out the other (a U, no knot here).
-  // Flared both ends so the cord never bends round a sharp edge.
-  for (const y of R.uY) {
-    c = c.cut(r.makeCylinder(S.uR, S.carriage + 2, [R.xC0 - 1, y, R.Zc], [1, 0, 0]));
-    c = c.cut(coneX(r, R.xC0 - 0.5, S.uR + 1.5, R.xC0 + 1, S.uR, y, R.Zc));
-    c = c.cut(coneX(r, R.xC1 - 3, S.uR, R.xC1 + 0.5, S.uR + 3.5, y, R.Zc));
+  // cord loop: in one hole, round the groove up the back, out the other (a U, no knot here).
+  // Holes one above the other, teardrop (they print lying). Flared both ends so the cord never
+  // bends round a sharp edge.
+  for (const z of R.uZ) {
+    c = c.cut(prismX(teardrop(r, R.Yc, z, S.uR), R.xC0 - 1, R.xC1 + 1));
+    c = c.cut(coneX(r, R.xC0 - 0.5, S.uR + 1.5, R.xC0 + 1, S.uR, R.Yc, z));
+    c = c.cut(coneX(r, R.xC1 - 3, S.uR, R.xC1 + 0.5, S.uR + 3.5, R.Yc, z));
   }
-  c = c.cut(r.makeCylinder(S.groove, R.uY[1] - R.uY[0], [R.xC1, R.uY[0], R.Zc], [0, 1, 0]));
-  // spring seats, a stop sleeve standing in each (inside the spring), guide bolt hole through
-  const Sv = R.sleeve;
+  c = c.cut(r.makeCylinder(S.groove, R.uZ[1] - R.uZ[0], [R.xC1, R.Yc, R.uZ[0]], [0, 0, 1]));
+  // spring seats and guide bolt holes (teardrop)
   for (const { y, z } of sp.pos) {
     c = c.cut(r.makeCylinder(sp.OD / 2 + 0.6, S.seat + 0.5, [R.xC0 - 0.5, y, z], [1, 0, 0]));
-    c = c.fuse(r.makeCylinder(Sv.r, Sv.len + 0.2, [R.xC0 + S.seat - Sv.len, y, z], [1, 0, 0])); // tip lands on the block's seat
-    c = c.cut(r.makeCylinder(S.rodHole, S.carriage + Sv.len + 2, [R.xC0 + S.seat - Sv.len - 1, y, z], [1, 0, 0]));
+    c = c.cut(prismX(teardrop(r, y, z, S.rodHole), R.xC0 - 1, R.xC1 + 1));
   }
   return c;
+}
+
+/** Stop sleeves, in place: one on each guide bolt position, from the carriage's seat forward
+ *  inside the spring. Printed separately, standing. */
+export function buildSleeves(r, R, pos = R.spring.pos) {
+  const S = ADDON_DIM.spring, Sv = R.sleeve;
+  const x0 = R.xC0 + S.seat - Sv.len;
+  return pos.map(({ y, z }) => r.makeCylinder(Sv.r, Sv.len, [x0, y, z], [1, 0, 0]).cut(r.makeCylinder(S.rodHole, Sv.len + 2, [x0 - 1, y, z], [1, 0, 0])));
 }
 
 export function buildFoot(r, P = footLayout()) {
@@ -518,6 +591,8 @@ export function buildFoot(r, P = footLayout()) {
     const y0 = k * P.yLug - P.lugT / 2, y1 = k * P.yLug + P.lugT / 2;
     s = s.fuse(prismY(lug, y0, y1));
     s = s.cut(prismY(teardrop(r, P.len / 2, P.zHole, rr), y0 - 1, y1 + 1));
+    const zb = P.zHole + rr * Math.SQRT2 + 0.6, zt = P.t + hTop - SKIN - 0.5;
+    if (zt - zb > 1) for (const q of P.bridgePins) s = s.cut(r.makeCylinder(TIE.r, zt - zb, [P.len / 2 + q.dx, k * P.yLug + q.dy, zb], [0, 0, 1]));
   }
   return [{ name: "foot_plate", kind: "addon", print: "flat", shape: s }];
 }
@@ -576,17 +651,17 @@ export function placeOverFoot(shape, L, cordX, zTopAt, P = footLayout()) {
   return shape.rotate(180, [0, 0, 0], [1, 0, 0]).translate([P.len / 2 - cordX, L.yF / 2, zTopAt + L.zTop]);
 }
 
-/** Rough filament mass (g), PETG at 5 walls / 40% infill: a solid skin over every surface
- *  (about 1.6 mm: 2.1 mm walls, 1 mm top and bottom) and 40% inside. Thin parts are mostly skin,
- *  so this counts cut-outs fairly (they add skin round their edges). */
+/** Rough filament mass (g), PETG at the print settings (print.js): a solid shell over every
+ *  surface (walls on upright faces, top/bottom layers on flat ones: about their average) and the
+ *  infill % inside. Thin parts are mostly shell, so this counts cut-outs fairly. */
 export const massG = (mm3, mm2) => {
-  const skin = Math.min(mm3, mm2 * 1.6);
-  return Math.round(((skin + (mm3 - skin) * 0.4) / 1000) * 1.27);
+  const skin = Math.min(mm3, (mm2 * (WALL + SKIN)) / 2);
+  return Math.round(((skin + (mm3 - skin) * (PRINT.infill / 100)) / 1000) * 1.27);
 };
 
 /** Rotate an add-on part to its print orientation and drop it onto z = 0. */
 export function printOrientAddon(shape, print) {
-  // standing = the carriage on its back face, stop sleeves pointing up
+  // standing = turned a quarter about Y, so parts along X (the stop sleeves) stand on end
   const s = print === "standing" ? shape.rotate(90, [0, 0, 0], [0, 1, 0]) : shape;
   const [min] = s.boundingBox.bounds;
   return s.translate([-min[0], -min[1], -min[2]]);

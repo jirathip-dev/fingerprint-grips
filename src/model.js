@@ -23,6 +23,7 @@
 // The cord goes down into the top block near one end, along a tunnel, and back out near
 // the other end (holes about 2/3 of the width apart, as on the HoG Micro). The two holes
 // sit dead centre, the same distance from both ends; the wide stance stops it rolling.
+import { WALL, SKIN, shell } from "./print.js";
 
 export const FINGERS = ["pinky", "ring", "middle", "index"]; // x order for a right hand
 
@@ -387,14 +388,17 @@ export function axleTool(r, L, s) {
 // Strength screen (hand calc, like the add-ons): 60 kg pulled x 2 safety factor, a quarter per
 // finger. With the walls cut back, the weakest section is level with the finger above each roller:
 // FDP: the fill's spine behind the back wall (slot wide). FDS: the wall behind the axle. Slices
-// print wall face down, so this bending runs along the layers. Guessed PETG limit, not a test.
+// print wall face down, so this bending runs along the layers. Only the printed shell counts
+// (print.js): the faces across the slice print flat (top/bottom layers), the back and the
+// cavity face print upright (walls). Guessed PETG limit, not a test.
 export const GRIP_SCREEN = { kg: 60, factor: 2, allow: 20 };
 export function screenGripper(L) {
   const F = (GRIP_SCREEN.kg * 9.81 * GRIP_SCREEN.factor) / 4;
   return L.slots.map((s) => {
     const [b, y0] = L.device === "fdp" ? [s.w, s.yCavBack] : [DIM.wall, s.yc];
     const d = -y0, e = y0 / 2 - s.yc; // section from y0 to the back face (y = 0); load on the axle
-    const mpa = (6 * F * e) / (b * d * d) + F / (b * d);
+    const S = shell(b, d, SKIN, WALL);
+    const mpa = (F * e) / S.Z + F / S.A;
     return { part: `${s.name}: back of the frame beside the finger`, value: round1(mpa), allow: GRIP_SCREEN.allow, unit: "MPa", ok: mpa <= GRIP_SCREEN.allow };
   });
 }

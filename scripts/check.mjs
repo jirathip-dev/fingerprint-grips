@@ -33,9 +33,25 @@ import opencascade from "replicad-opencascadejs";
 import * as r from "replicad";
 import { buildGripper, printOrient, validate, layout, spoolR, DEFAULT_HAND, DIM, mirrored, PIN_LENGTHS, BOLT_LENGTHS, PIN_ENGAGE, BOLT_SPARE, CS, CS_LENGTHS, csBoltFor } from "../src/model.js";
 import {
-  rigLayout, buildRig, rigGhosts, floorWindows, buildFoot, footLayout, footGhosts, placeInRig, printOrientAddon,
+  rigLayout, buildRig, rigGhosts, floorWindows, buildSleeves, ALLOW, buildFoot, footLayout, footGhosts, placeInRig, printOrientAddon,
   springMath, validateSpring, loopCord, SPRING_DEFAULT, ADDON_DIM, TINDEQ,
 } from "../src/accessories.js";
+import { PRINT, WALL, SKIN } from "../src/print.js";
+
+// The geometry library's memory only grows, so the gripper and the add-on sections each run in a
+// process of their own: `node scripts/check.mjs` (no env) runs both, one after the other.
+// CHECK_ADDONS_ONLY=1 = add-ons only (mutation runs), CHECK_GRIPPER_ONLY=1 = gripper only.
+if (!process.env.CHECK_ADDONS_ONLY && !process.env.CHECK_GRIPPER_ONLY) {
+  const { spawnSync } = await import("node:child_process");
+  let code = 0;
+  for (const part of ["CHECK_GRIPPER_ONLY", "CHECK_ADDONS_ONLY"]) {
+    const res = spawnSync(process.execPath, [process.argv[1]], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, [part]: "1" }, encoding: "utf8", maxBuffer: 64 << 20 });
+    process.stdout.write(res.stdout.replace(/^all checks passed.*\n?/m, ""));
+    if (res.status !== 0) code = res.status || 1;
+  }
+  if (code === 0) console.log("all checks passed (STLs in ./out)");
+  process.exit(code);
+}
 
 const require = createRequire(import.meta.url);
 r.setOC(await opencascade({ wasmBinary: readFileSync(require.resolve("replicad-opencascadejs/wasm")) }));
@@ -70,6 +86,7 @@ function watertight(stlBuf) {
 
 mkdirSync("out", { recursive: true });
 const ADDONS_ONLY = !!process.env.CHECK_ADDONS_ONLY; // mutation runs: skip the gripper section
+const GRIPPER_ONLY = !!process.env.CHECK_GRIPPER_ONLY; // skip the add-on section
 for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
   for (const side of ["right", "left"]) {
     const tag = `${device}/${side}`;
@@ -185,6 +202,14 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
     //     is still one piece, and the strength screen passes.
     for (const p of frames) if (p.shape.solids.length !== 1) fail(`${tag} ${p.name} is ${p.shape.solids.length} loose pieces`);
     for (const it of info.screen.items) if (!it.ok) fail(`${tag}: strength screen: ${it.part} ${it.value} > ${it.allow} MPa`);
+    {
+      // the screen counts only the printed shell (independent hand calc, pinky)
+      const s = L.slots[0], [b, y0] = L.device === "fdp" ? [s.w, s.yCavBack] : [DIM.wall, s.yc];
+      const d = -y0, e = y0 / 2 - s.yc, F = (60 * 9.81 * 2) / 4, bi = b - 2 * SKIN, di = d - 2 * WALL;
+      const I = bi > 0 && di > 0 ? (b * d ** 3 - bi * di ** 3) / 12 : (b * d ** 3) / 12, A = bi > 0 && di > 0 ? b * d - bi * di : b * d;
+      const want = (F * e * (d / 2)) / I + F / A, got = info.screen.items[0].value;
+      if (!(Math.abs(got - want) < 0.11)) fail(`${tag}: gripper screen ${got} MPa != hand calc on the printed shell ${want.toFixed(1)}`);
+    }
     L.slots.forEach((s, i) => {
       const rb = s.r - DIM.bossInset;
       for (const wx of [s.wallX + DIM.wall / 2, s.xs + s.w + DIM.wall / 2]) {
@@ -345,7 +370,7 @@ for (const device of ADDONS_ONLY ? [] : ["fdp", "fds"]) {
   }
 }
 
-for (const device of ["fdp", "fds"]) {
+for (const device of GRIPPER_ONLY ? [] : ["fdp", "fds"]) {
   const g = buildGripper(r, DEFAULT_HAND, { device, side: "right" });
   for (const SP of [SPRING_DEFAULT, { ...SPRING_DEFAULT, count: 4 }]) {
     const tag = `${device}+platform x${SP.count}`;
@@ -416,6 +441,24 @@ for (const device of ["fdp", "fds"]) {
     // shortest it can be is the gripper at its furthest to the Tindeq at rest
     if (R.xT0 - R.xBayEnd < KNOT_ROOM) fail(`${tag}: the Tindeq sits too close to the gripper for the knot (${(R.xT0 - R.xBayEnd).toFixed(0)} mm)`);
     for (const y0 of R.guideY) if (!solidAt(rig, [(R.tindeqRun[0] + R.tindeqRun[1]) / 2, y0 + ADDON_DIM.tindeq.guideT / 2, R.guideTop - 2], 0.5)) fail(`${tag}: side guide missing at y=${y0.toFixed(0)}`);
+    // A5c tie pins (solid zones without slicer modifiers): each pin is open where the screen
+    // counts it, and blind: skin left above it (and below, for joint and block pins)
+    {
+      const sets = [
+        ["leg-hole roof", R.legHole.pins.map((p) => ({ ...p, z0: R.legHole.z + R.legHole.r * Math.SQRT2 + 0.8, z1: R.legHole.pinTop }))],
+        ["joint", R.jointPins.map((p) => ({ ...p, z0: R.jointPinZ[0], z1: R.jointPinZ[1] }))],
+        ["seat block", R.blockPins.at.map((p) => ({ ...p, z0: R.blockPins.z[0], z1: R.blockPins.z[1] }))],
+      ];
+      if (!R.jointPins.length && R.cuts.length) fail(`${tag}: no tie pins at the joints`);
+      if (R.legHole.pins.length < 2) fail(`${tag}: no tie pins in the leg-push hole roof`);
+      if (!R.blockPins.at.length) fail(`${tag}: no tie pins in the spring seat blocks`);
+      for (const [what, ps] of sets)
+        for (const p of ps) {
+          if (!airAt(rig, [p.x, p.y, (p.z0 + p.z1) / 2], 0.5)) fail(`${tag}: ${what} tie pin at x=${p.x.toFixed(0)} missing`);
+          if (!solidAt(rig, [p.x, p.y, p.z1 + 1.6], 0.3)) fail(`${tag}: ${what} tie pin at x=${p.x.toFixed(0)} breaks through the top`);
+        }
+      for (const p of R.jointPins) if (!solidAt(rig, [p.x, p.y, R.jointPinZ[0] - 0.3], 0.2)) fail(`${tag}: joint tie pin at x=${p.x.toFixed(0)} opens into the bolt pocket`);
+    }
     // A5b floor windows (weight): there are some, each is open, narrower than the Tindeq (it
     // can't drop in), a solid spine runs under the cord line, ribs between them tie the rails,
     // and none sits under a seat block or next to a joint
@@ -462,15 +505,28 @@ for (const device of ["fdp", "fds"]) {
       const c = common(rig, gh.shape);
       if (c > 0.5) fail(`${tag}: a spring clashes with the frame (${c.toFixed(0)} mm3)`);
     }
-    const carriage = parts.find((p) => p.name === "spring_carriage").shape;
+    const carriageOnly = parts.find((p) => p.name === "spring_carriage").shape;
+    // the carriage with its stop sleeves on the bolts in use (they move with it)
+    const sleeves = buildSleeves(r, R, sp.used);
+    const carriage = sleeves.reduce((a, s) => a.fuse(s), carriageOnly.clone());
+    // A6c the carriage prints lying as it sits: flat bottom on the bed, cord holes one above the
+    // other (so the web between them is loaded along the layers), and the sleeves are their own part
+    {
+      const cp = parts.find((p) => p.name === "spring_carriage");
+      if (cp.print !== "flat") fail(`${tag}: the carriage doesn't print lying (the cord would pull its layers apart)`);
+      if (!(Math.abs(R.uZ[0] - R.Zc) > 1 && Math.abs(R.uZ[1] - R.Zc) > 1 && R.uZ[0] < R.Zc && R.uZ[1] > R.Zc)) fail(`${tag}: carriage cord holes are not one above the other`);
+      const sl = parts.find((p) => p.name === "stop_sleeves_x4");
+      if (!sl || sl.print !== "standing") fail(`${tag}: stop sleeves are not a separate part printed standing`);
+      else if (common(carriageOnly, sl.shape) > 0.5) fail(`${tag}: stop sleeves overlap the carriage`);
+    }
     // A6b carriage cord: a U loop, no knot. Two holes through, a groove on the back joining them,
     // and the loop clears every printed part at rest and at full squeeze.
     {
       const S = ADDON_DIM.spring;
-      for (const y of R.uY) if (!airAt(carriage, [(R.xC0 + R.xC1) / 2, y, R.Zc], 2.4)) fail(`${tag}: carriage cord hole missing at y=${y.toFixed(0)}`);
+      for (const z of R.uZ) if (!airAt(carriage, [(R.xC0 + R.xC1) / 2, R.Yc, z], 2.4)) fail(`${tag}: carriage cord hole missing at z=${z.toFixed(0)}`);
       if (!airAt(carriage, [R.xC1 - 1, R.Yc, R.Zc], 2)) fail(`${tag}: no groove on the back of the carriage for the cord loop`);
       if (!solidAt(carriage, [R.xC0 + 2, R.Yc, R.Zc], 1)) fail(`${tag}: no web between the carriage cord holes (the loop would pull through)`);
-      if (!solidAt(carriage, [R.xC0 + 3, R.Yc, R.Zc + S.uR + 2], 0.8)) fail(`${tag}: the carriage web is not joined to the top`);
+      for (const k of [-1, 1]) if (!solidAt(carriage, [R.xC0 + 3, R.Yc + k * (S.uR + 2), R.Zc], 0.8)) fail(`${tag}: the carriage web is not joined at the ${k > 0 ? "left" : "right"}`);
       for (const load of ["springs", "both", "tindeq"])
         for (const dx of [0, sp.travel]) {
           const hit = loopCord(r, R, load, dx, 2.4).reduce((a, s) => a + common(rig, s) + common(carriage.clone().translate([-dx, 0, 0]), s), 0);
@@ -487,7 +543,7 @@ for (const device of ["fdp", "fds"]) {
     // the stops are the 4 sleeves (one inside each spring), never the springs themselves
     for (const { y, z } of sp.pos) {
       const tip = R.xC0 + ADDON_DIM.spring.seat - R.sleeve.len;
-      if (!solidAt(carriage, [tip + 1, y + (R.sleeve.r + ADDON_DIM.spring.rodHole) / 2, z], 0.4)) fail(`${tag}: no stop sleeve inside the spring at y=${y.toFixed(0)} z=${z.toFixed(0)}`);
+      if (!solidAt(buildSleeves(r, R).reduce((a, s) => a.fuse(s)), [tip + 1, y + (R.sleeve.r + ADDON_DIM.spring.rodHole) / 2, z], 0.4)) fail(`${tag}: no stop sleeve inside the spring at y=${y.toFixed(0)} z=${z.toFixed(0)}`);
       if (R.sleeve.r > sp.ID / 2 - 0.3) fail(`${tag}: stop sleeve rubs the inside of the spring`);
     }
     const hand = (79300 * 2 ** 4) / (8 * 14 ** 3 * 6); // 2 mm wire, 16 OD, 8 coils: k by hand
@@ -534,10 +590,26 @@ for (const device of ["fdp", "fds"]) {
     if (R.screen.kg + 0.05 < springMath({ ...SP, count: 4 }).totalKg) fail(`${tag}: strength screen ignores the 4-spring load (${R.screen.kg} kg)`);
     // A8
     for (const it of R.screen.items) if (!it.ok) fail(`${tag}: strength screen: ${it.part} ${it.value} > ${it.allow} ${it.unit}`);
+    // A8b the screen counts only the printed shell, at the published settings (independent hand
+    // calc of two items), and uses the researched limits
+    {
+      const F = R.screen.forceN, w = ADDON_DIM.rail.w, h = ADDON_DIM.rail.h, zL = Math.max(R.Zc, R.Zp);
+      const bi = w - 2 * WALL, hi = h - 2 * SKIN, I = (w * h ** 3 - bi * hi ** 3) / 12, A = w * h - bi * hi;
+      const rail = (F * (zL - h / 2) * (h / 2)) / (2 * I) + F / (2 * A);
+      const got = R.screen.items.find((i) => i.part === "rails (bending)")?.value;
+      if (!(Math.abs(got - rail) < 0.11)) fail(`${tag}: rail screen ${got} MPa != hand calc on the printed shell ${rail.toFixed(1)} (solid section counted?)`);
+      const S = ADDON_DIM.spring, web = 2 * (S.uDy - S.uR), d = S.carriage - S.groove;
+      const Wb = web - 2 * SKIN, Wd = d - 2 * WALL, Iw = (web * d ** 3 - Wb * Wd ** 3) / 12, Qw = (web * d * d - Wb * Wd * Wd) / 8;
+      const shear = ((F / 2) * Qw) / (Iw * (web - Wb));
+      const gs = R.screen.items.find((i) => i.part === "carriage web (shear)")?.value;
+      if (!(Math.abs(gs - shear) < 0.11)) fail(`${tag}: carriage web shear ${gs} MPa != hand calc on the printed shell ${shear.toFixed(1)}`);
+      if (ALLOW.compression > 20) fail(`${tag}: compression limit ${ALLOW.compression} MPa is over the researched 20`);
+      if (PRINT.infill > 20 || PRINT.walls < 5) fail(`${tag}: print settings drifted from the researched light profile (${PRINT.walls} walls, ${PRINT.infill}%)`);
+    }
     console.log(`ok?  ${tag}: ${parts.length} pieces, ${R.xEnd.toFixed(0)} x ${(2 * R.outer).toFixed(0)} mm, palm ${R.Zp} mm, cord z ${R.Zc.toFixed(0)}, ${sp.totalKg.toFixed(0)} kg over ${sp.travel.toFixed(0)} mm`);
   }
 }
-{
+if (!GRIPPER_ONLY) {
   // A7 foot plate
   const P = footLayout();
   const [foot] = buildFoot(r, P);

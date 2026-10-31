@@ -53,26 +53,32 @@ Not endorsements, no affiliate links. Any hardware or climbing shop works too.
 
 Pick one under **Add-on**. It's sized around the gripper you configured and goes in the same zip (`print/addon/`).
 
-**Platform** (table or floor). One print, used every way, in the spirit of the [Crimpdeq platform](https://platform.crimpdeq.com/introduction) and [Crimpy](https://www.instagram.com/crimpy.official/). The gripper lies on its back between two rails and the cord runs straight down the middle: gripper → Tindeq bay → anchor wall → spring section.
+**Platform** (table or floor). One print, used every way, in the spirit of the [Crimpdeq platform](https://platform.crimpdeq.com/introduction) and [Crimpy](https://www.instagram.com/crimpy.official/). The gripper lies on its back between two rails and the cord runs straight down the middle: gripper → Tindeq bay → spring carriage at the far end. The springs sit beside the Tindeq, so the platform is about 330 mm long, in 2 pieces.
 
 | Load | How | You read |
 |---|---|---|
-| Tindeq | Tindeq in the bay, far eye clipped round the bridge in the anchor wall | Tindeq app |
-| Springs | cord through the wall to the spring carriage, no Tindeq | 5 kg marks on the rails, from the spring maths |
-| Both | Tindeq in the bay, then on through the wall to the springs | Tindeq app: real force, and a check on the rail marks |
+| Tindeq | Tindeq in the bay, far eye clipped to the cord loop round the carriage; no springs, the carriage sits on its stops | Tindeq app |
+| Springs | cord down the bay to the spring carriage, no Tindeq | 5 kg marks on the rails, from the spring maths |
+| Both | Tindeq in the bay, its far eye on the carriage loop; springs beside it | Tindeq app: real force, and a check on the rail marks |
 
 | Push with | How |
 |---|---|
 | Palm | platform on a table, heel of the hand on the rounded rest |
 | Legs | platform on the floor, sitting, soles against the front of the rest, cord through the slot in it |
 
-Buy: M5 × 30 bolts to join the parts; for springs, 2–4 compression springs (any shop size: enter wire / OD / length / coils) and one M5 guide bolt per spring; a carabiner for the Tindeq. All stock lengths.
+Buy: M5 × 30 bolts to join the parts; at least 2 M5 guide bolts for the carriage (one per spring with 4 springs); for springs, 2–4 compression springs (any shop size, inner diameter 10 mm or more: enter wire / OD / length / coils); a carabiner for the Tindeq. All stock lengths. Print 4 stop sleeves (one part); one goes on every guide bolt in use.
 
 **Foot plate** (one foot). A lug each side of your foot (120 mm between them); a cord from each lug meets the other at the Tindeq's lower eye at least 250 mm up, so the pull stays centred under one foot. Hang the gripper from the Tindeq's top eye and pull up.
 
 - The Tindeq Progressor 200 is about 100 × 55 × 25 mm (19 mm at the ends), eyes ~69 mm apart: measured from photos, ±2 mm. The platform never clamps it, so the exact size doesn't matter; it only needs clearance, including over the extra distance it moves when springs are fitted.
 - Springs: rate `k = G d⁴ / (8 D³ nₐ)`. The travel stops before the wire would take a set (Wahl-corrected shear ≤ 40% of the wire's tensile strength) or the coils touch. Cheap springs vary about ±20%: check once with the Tindeq (load "both").
-- Each add-on is paper-screened at its rating × 2 (platform: 60 kg or the full spring load, whichever is higher; foot plate: 100 kg) with **assumed** PETG limits (20 MPa along layers, 6 MPa across). That's a sanity check, not a load test.
+- Each add-on is paper-screened at its rating × 2 (platform: 60 kg or the full spring load, whichever is higher; foot plate: 100 kg) with **assumed** PETG limits (20 MPa bending along layers, 10 MPa shear, 6 MPa across layers, 20 MPa compression). Only the printed shell counts (walls and top/bottom layers at the settings below), not the sparse infill. That's a sanity check, not a load test.
+
+### Print settings
+
+PETG, 0.4 mm nozzle at 250 °C, flow 0.95, dried filament. 0.20 mm layers, **5 walls, 10 top + 10 bottom layers, 15% gyroid infill**, no supports. Every part already lies the way it prints. Don't anneal.
+
+Why: in bent parts the walls and top/bottom layers carry the load and the middle does little, so more walls and less infill is about 10% lighter than 40% infill with the same strength on paper (measured tests: CNC Kitchen, PETG bending studies). Where a load goes into a part (the platform joints, the spring seat blocks, the leg-push hole roof, the foot plate's lug bridges), the model has rows of thin blind holes ("tie pins"). The slicer walls each one, so those spots print solid with no extra slicer settings. The spring carriage prints lying as it sits, so the cord loop pulls along its layers, not across them.
 - Not affiliated with Crimpdeq or Crimpy; their designs aren't copied, only the idea of a palm-push rig and a spring trainer.
 
 > Status: prototype. Fit rules come from the Open Grips project and have not
@@ -125,10 +131,11 @@ and for each add-on (FDP + FDS, platform with 2 and 4 springs):
 - the gripper clashing with the platform, or not resting on the ledges, at either end of its travel; no room under an FDS gripper for the fingertips
 - a palm rest more than 6 mm off the middle finger's way in, or not full width
 - anything printed in the straight cord line from the front of the rest (leg-push slot) to behind the spring carriage; a slot too wide for the rest
-- a printed part within 2 mm of the Tindeq anywhere along its run (it moves when springs are fitted), the Tindeq reaching the gripper's knot, side guides missing, the wall window closed or with no bridge above it
+- a printed part within 2 mm of the Tindeq anywhere along its run (it moves when springs are fitted), the Tindeq reaching the gripper's knot, side guides missing; the platform longer than it needs to be; floor windows too long for the Tindeq to sit on two ribs, cutting the cord spine, or near a joint
 - springs touching the frame; the carriage hitting the frame early, or nothing stopping it at full travel; a spring rate that disagrees with the hand calculation; the wire overloaded at full squeeze; kg marks in the wrong place
 - foot plate: less than 110 mm for the foot, anything sticking up where the foot goes, either lug hole blocked or without a bridge, a cord rubbing the plate or pressing on the top of the foot
-- any piece over its assumed limit in the strength screen; bad spring sizes that are accepted
+- the carriage not printing lying, its cord holes not one above the other, the stop sleeves not a separate part; tie pins missing, breaking through a top face or into a bolt pocket
+- any piece over its assumed limit in the strength screen, or a screen that counts solid plastic instead of the printed shell (checked against a separate hand calculation); bad spring sizes that are accepted
 
 ## Layout
 

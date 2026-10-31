@@ -5,6 +5,7 @@ import { zipSync, strToU8 } from "fflate";
 import { FINGERS, DEFAULT_HAND, MEASURES, DEVICES } from "./model.js";
 import { SPRING_FIELDS, SPRING_DEFAULT, springMath, validateSpring, TINDEQ } from "./accessories.js";
 import { partsFor, partsHtml, partsText } from "./parts.js";
+import { PRINT, printLine } from "./print.js";
 
 // ---------- form ----------
 const form = document.querySelector("#hand-form");
@@ -306,7 +307,7 @@ function addonNotes(a) {
   const common = `
 Print the add-on (Bambu Studio)
 ${files}
-  PETG, 0.20 mm, 5 walls, 40% infill, no supports. Every part already lies the way it prints.
+  ${printLine()}. Same settings as the gripper (see above). Every part already lies the way it prints.
   About ${a.grams} g of filament.
 `;
   if (a.kind === "foot")
@@ -343,9 +344,10 @@ Assembly
   1. Butt the parts together. At each joint, put a bolt through the hole low in each rail,
      head in the pocket on one side, washer + nut in the pocket on the other. Tighten firmly.
   2. Lay the gripper on its back on the two ledges, finger side toward the rest.
-  3. Carriage: it goes at the far end, stop sleeves pointing toward you, past the two spring
-     seat blocks. Push a guide bolt (with a washer) from behind through the carriage, through a
-     spring if fitted, and through the seat block; washer + nut on the block's near side.
+  3. Carriage: it goes at the far end, past the two spring seat blocks, with the spring seats
+     toward you and the cord groove at the back. Push a guide bolt (with a washer) from behind
+     through the carriage, then a stop sleeve, a spring over it if fitted, and through the seat
+     block; washer + nut on the block's near side. Every bolt in use gets a stop sleeve.
      4 springs: all four holes. 2 springs: two opposite corners (top-left + bottom-right), so the
      pull stays centred. Tindeq only: two bolts, no springs, opposite corners too.
      Tightening the nuts pre-loads the springs.
@@ -372,7 +374,7 @@ Brace: pick one
 Springs
   About ${kg(s.totalKg)} kg at full squeeze over ${s.travel} mm (${s.kgPerMm} kg per mm) with ${s.count} springs.
   More load: fit 4 springs (about ${kg(s.kg4)} kg), no reprint. Lighter: 2 (about ${kg(s.kg2)} kg).
-  The carriage hits the stop posts at full squeeze, before the springs are overloaded.
+  The carriage lands on its stop sleeves at full squeeze, before the springs are overloaded.
   Rail marks: seen from the palm rest, the LEFT rail is marked for 2 springs, the RIGHT rail
   for 4. They show where the carriage's front face sits at each 5 kg (${s.marks.join(", ")} kg
   with ${s.count}); the 10 kg marks are wider.
@@ -398,11 +400,16 @@ Files
   assembled.step       everything in place, opens in any CAD tool
   measurements.json    what you typed in, so you can re-make it later
 
-Print (Bambu Studio)
-  Filament   PETG HF or PETG Basic, dried
-  Layer      0.20 mm, 0.4 mm nozzle
-  Walls      5 loops, infill 40% gyroid or cubic
+Print (Bambu Studio). The strength checks assume exactly these settings.
+  Filament   PETG HF or PETG Basic, dried (65 °C for 8 h if it's been open a while)
+  Nozzle     0.4 mm at ${PRINT.temp} °C (hot, so the layers bond well), flow ${PRINT.flow}
+  Layer      ${PRINT.layer.toFixed(2)} mm
+  Walls      ${PRINT.walls} loops (wall loops = ${PRINT.walls}, line width 0.45 mm)
+  Top/bottom ${PRINT.topBottom} layers each (top shell layers = bottom shell layers = ${PRINT.topBottom})
+  Infill     ${PRINT.infill}% ${PRINT.pattern}. The walls and top/bottom layers carry the load; the
+             small holes in some places make the slicer print those spots solid, on purpose.
   Supports   none needed: every part already lies flat on the plate
+  Don't anneal (heat-treat) the parts: PETG gains little and can warp.
 
 Hardware (all stock shop lengths: nothing to cut)
 ${info.hardware.axle === "bolt" ? "  4 x M3 countersunk bolts (flat head, ISO 10642 / DIN 7991), the roller axles:" : "  4 x 3 mm steel dowel pins (the roller axles):"}
