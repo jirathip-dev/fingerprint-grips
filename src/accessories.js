@@ -38,23 +38,27 @@ export const ADDON_DIM = {
   // at the bottom). Head and nut sit in pockets open to the outside and the bed; wall = printed
   // material each side of the cut that the bolt clamps.
   joint: { z: 6, pocketW: 9.5, pocketH: 12, wall: 10, headPocket: 38, nutPocket: 12, bolt: 30 },
-  palm: { root: 52, top: 18, arc: 7, hole: 12, drop: 3 }, // solid rest: base, top, rounding. hole = leg-push cord
+  palm: { root: 38, top: 18, arc: 7, hole: 12, drop: 3 }, // solid rest: base, top, rounding. hole = leg-push cord
   // tunnel (closed: the cord can't lift out), its centre `drop` below the cord line so the cord rides its roof on the line
   strap: { w: 27, h: 4.5, z: 14, edge: 3 }, // leg push: slots for a 25 mm strap over the feet (rowing-machine style)
   legAngle: 45, // leg push: design angle of the cord up to your hands (strength screen)
   legLift: 150, // preview only: hands this far above the cord line
-  travel: 30, // the cord length sets where the gripper sits: 0-30 mm from the palm rest
+  travel: 20, // the cord length sets where the gripper sits: 0-20 mm from the palm rest
   legReach: 260, // preview only: leg push, gripper this far in front of the rest (in your hands)
-  cordGap: 14, // gripper top (at its furthest) to the Tindeq: room for the knot
+  cordGap: 12, // gripper top (at its furthest) to the Tindeq at its nearest (full squeeze, or on its stops): room for the knot
   maxPiece: 236, // longest printed piece (A1 bed is 256 mm)
   tindeq: { floor: 6, guideH: 14, guideT: 4, clear: 4 },
+  // floor windows (weight): a ladder of cut-outs between cross ribs. A spine stays under the
+  // cord and an edge strip along each side guide, so the Tindeq always rests on solid floor;
+  // ribs keep the rails tied together; none within cutClear of a joint.
+  windows: { len: 40, rib: 8, edge: 3, spine: 8, cutClear: 14 },
   // spring section beside the Tindeq. carriage cord: a loop through two holes and round a groove
   // on the back (a U, no knot on the carriage); uDy = hole offset from the cord line, uR = hole
   // radius. blockIn = seat blocks start this far from the cord line (clear of the Tindeq);
   // block + buttress = seat block thickness along the pull. endGap = Tindeq far end to the
   // carriage (the loop clips to its far eye). tail = guide bolt head + washer behind the carriage.
   // sleeveGap = stop sleeve to the spring's inside, all round.
-  spring: { carriage: 18, preload: 1, uDy: 10, uR: 3.75, groove: 3.4, blockIn: 30.5, block: 16, buttress: 15, endGap: 12, tail: 8, sleeveGap: 0.5, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
+  spring: { carriage: 18, preload: 1, uDy: 10, uR: 3.75, groove: 3.4, blockIn: 30.5, block: 12, buttress: 15, endGap: 10, tail: 7, sleeveGap: 0.5, seat: 1.5, rodHole: 2.75 }, // M5 guide bolts
   foot: { len: 230, width: 160, t: 11, lugL: 70, lugT: 20, holeD: 14, holeZ: 26, over: 18, apex: 250, footW: 110 },
 };
 
@@ -230,6 +234,7 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   R.pieces = splitPieces(R.xEnd, R.cuttable, A.maxPiece);
   R.cuts = R.pieces.slice(1).map(([x0]) => x0);
   R.boltY = [-1, 1].map((k) => k * (outer - J.pocketW / 2)); // bolt line, inside each rail
+  R.windows = floorWindows(R);
   // spring guides: M5 bolt, head + washer behind the carriage (it holds the carriage at rest),
   // through carriage + sleeve + spring + seat block, washer + nut on the block's near face
   // (tighten it to preload). Shop length: carriage back to block front + washer, nut, 2 threads.
@@ -237,6 +242,41 @@ export function rigLayout(gL, gInfo, spring = SPRING_DEFAULT) {
   if (!R.guideBolt) R.problems.push(`Those springs are too long for a stock M5 bolt (needs ${Math.ceil(R.xC1 - R.xS0 + 8)} mm). Use shorter springs.`);
   R.screen = screenRig(R);
   return R;
+}
+
+/** Floor windows: a ladder along the floor (Tindeq bay + spring section), cross ribs between,
+ *  a spine under the cord, kept off the side guides, the seat blocks and the joints. */
+export function floorWindows(R) {
+  const A = ADDON_DIM, W = A.windows, T = A.tindeq, S = A.spring;
+  const gIn = A.tindeq.clear + TINDEQ.width / 2; // side guides' inner faces, from the cord line
+  const gOut = gIn + T.guideT;
+  // y bands (absolute): inside the guides each side of the spine, and outside the guides up to
+  // the rails (the seat blocks sit on the floor there, so those stop short of the blocks)
+  const bandsIn = [[R.Yc + W.spine / 2, R.Yc + gIn - W.edge], [R.Yc - gIn + W.edge, R.Yc - W.spine / 2]];
+  const bandsOut = [[R.Yc + gOut + W.edge, R.inner - W.edge], [-R.inner + W.edge, R.Yc - gOut - W.edge]];
+  const x0 = R.tindeqRun[0] - 4 + W.edge, xEnd = R.xC1 - W.edge;
+  const xBlock0 = R.xS0 - S.buttress - W.edge, xBlock1 = R.xS1 + W.edge;
+  const avoid = R.cuts.map((c) => [c - W.cutClear, c + W.cutClear]);
+  const out = [];
+  const lay = (a, b, bands) => {
+    const n = Math.max(1, Math.ceil((b - a + W.rib) / (W.len + W.rib))); // windows at most W.len long
+    const len = (b - a - (n - 1) * W.rib) / n;
+    if (len < 12) return;
+    for (let i = 0; i < n; i++) {
+      const xa = a + i * (len + W.rib), xb = xa + len;
+      for (const [y0, y1] of bands) if (y1 - y0 >= 8) out.push({ x0: xa, x1: xb, y0, y1 });
+    }
+  };
+  // stretches of floor between the joints
+  const spans = (a, b) => {
+    let segs = [[a, b]];
+    for (const [c0, c1] of avoid) segs = segs.flatMap(([s0, s1]) => (c1 <= s0 || c0 >= s1 ? [[s0, s1]] : [[s0, c0], [c1, s1]].filter(([p, q]) => q - p > 12)));
+    return segs;
+  };
+  for (const [a, b] of spans(x0, xEnd)) lay(a, b, bandsIn); // inside the guides, the whole floor
+  for (const [a, b] of spans(x0, xBlock0)) lay(a, b, bandsOut); // outside them, up to the seat blocks
+  for (const [a, b] of spans(xBlock1, xEnd)) lay(a, b, bandsOut); // and between the blocks and the carriage end
+  return out;
 }
 
 /** Palm rest height: the middle of the middle finger's way in (between the roller front and the
@@ -398,6 +438,7 @@ export function buildRig(r, R) {
     const w = m.kg % 10 === 0 ? 2.4 : 1.2;
     tools.push(box(r, m.x - w / 2, m.x + w / 2, m.rail > 0 ? inner : -outer, m.rail > 0 ? outer : -inner, A.rail.h - 1.2, A.rail.h + 1));
   }
+  for (const w of R.windows) tools.push(box(r, w.x0, w.x1, w.y0, w.y1, -1, T.floor + 0.5));
   // joint bolts: hole across each cut, head pocket on the near piece, nut pocket on the far one
   const J = A.joint;
   for (const xc of R.cuts)
@@ -535,8 +576,13 @@ export function placeOverFoot(shape, L, cordX, zTopAt, P = footLayout()) {
   return shape.rotate(180, [0, 0, 0], [1, 0, 0]).translate([P.len / 2 - cordX, L.yF / 2, zTopAt + L.zTop]);
 }
 
-/** Rough filament mass (g) for PETG at 5 walls / 40% infill: solid volume x 1.27 g/cm3 x 0.55. */
-export const massG = (mm3) => Math.round((mm3 / 1000) * 1.27 * 0.55);
+/** Rough filament mass (g), PETG at 5 walls / 40% infill: a solid skin over every surface
+ *  (about 1.6 mm: 2.1 mm walls, 1 mm top and bottom) and 40% inside. Thin parts are mostly skin,
+ *  so this counts cut-outs fairly (they add skin round their edges). */
+export const massG = (mm3, mm2) => {
+  const skin = Math.min(mm3, mm2 * 1.6);
+  return Math.round(((skin + (mm3 - skin) * 0.4) / 1000) * 1.27);
+};
 
 /** Rotate an add-on part to its print orientation and drop it onto z = 0. */
 export function printOrientAddon(shape, print) {

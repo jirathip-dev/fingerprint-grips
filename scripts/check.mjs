@@ -33,7 +33,7 @@ import opencascade from "replicad-opencascadejs";
 import * as r from "replicad";
 import { buildGripper, printOrient, validate, layout, spoolR, DEFAULT_HAND, DIM, mirrored, PIN_LENGTHS, BOLT_LENGTHS, PIN_ENGAGE, BOLT_SPARE, CS, CS_LENGTHS, csBoltFor } from "../src/model.js";
 import {
-  rigLayout, buildRig, rigGhosts, buildFoot, footLayout, footGhosts, placeInRig, printOrientAddon,
+  rigLayout, buildRig, rigGhosts, floorWindows, buildFoot, footLayout, footGhosts, placeInRig, printOrientAddon,
   springMath, validateSpring, loopCord, SPRING_DEFAULT, ADDON_DIM, TINDEQ,
 } from "../src/accessories.js";
 
@@ -416,6 +416,34 @@ for (const device of ["fdp", "fds"]) {
     // shortest it can be is the gripper at its furthest to the Tindeq at rest
     if (R.xT0 - R.xBayEnd < KNOT_ROOM) fail(`${tag}: the Tindeq sits too close to the gripper for the knot (${(R.xT0 - R.xBayEnd).toFixed(0)} mm)`);
     for (const y0 of R.guideY) if (!solidAt(rig, [(R.tindeqRun[0] + R.tindeqRun[1]) / 2, y0 + ADDON_DIM.tindeq.guideT / 2, R.guideTop - 2], 0.5)) fail(`${tag}: side guide missing at y=${y0.toFixed(0)}`);
+    // A5b floor windows (weight): there are some, each is open, narrower than the Tindeq (it
+    // can't drop in), a solid spine runs under the cord line, ribs between them tie the rails,
+    // and none sits under a seat block or next to a joint
+    {
+      const W = ADDON_DIM.windows, ws = R.windows, zf = ADDON_DIM.tindeq.floor / 2;
+      if (!ws.length) fail(`${tag}: no floor windows (the floor is solid: heavier than it needs to be)`);
+      for (const w of ws) {
+        const xm = (w.x0 + w.x1) / 2, ym = (w.y0 + w.y1) / 2;
+        if (!airAt(rig, [xm, ym, zf], 1)) fail(`${tag}: floor window at x=${xm.toFixed(0)} is not open`);
+        // the Tindeq rests on the spine and the cross ribs: every window shorter than half the
+        // Tindeq, so at least two ribs are always under it, wherever it sits
+        if (w.x1 - w.x0 > T.length / 2 - W.rib) fail(`${tag}: floor window at x=${xm.toFixed(0)} is ${(w.x1 - w.x0).toFixed(0)} mm long: the Tindeq could rest on fewer than two ribs`);
+        if (w.y0 < R.Yc + W.spine / 2 - 0.01 && w.y1 > R.Yc - W.spine / 2 + 0.01) fail(`${tag}: floor window at x=${xm.toFixed(0)} cuts the spine under the cord`);
+        for (const xc of R.cuts) if (w.x1 > xc - 10 && w.x0 < xc + 10) fail(`${tag}: floor window at x=${xm.toFixed(0)} too close to the joint at x=${xc.toFixed(0)}`);
+        const underBlock = w.x1 > R.xS0 - ADDON_DIM.spring.buttress && w.x0 < R.xS1 && Math.max(Math.abs(w.y0 - R.Yc), Math.abs(w.y1 - R.Yc)) > ADDON_DIM.spring.blockIn;
+        if (underBlock) fail(`${tag}: floor window at x=${xm.toFixed(0)} is under a spring seat block`);
+      }
+      // ribs: between two windows in the same band there is solid floor at least 4 mm long
+      for (const a of ws) for (const b of ws) if (b !== a && b.y0 === a.y0 && b.x0 > a.x1 - 0.01 && b.x0 - a.x1 < 4) fail(`${tag}: no cross rib between floor windows at x=${a.x1.toFixed(0)}`);
+      // joints: today's cut sits ahead of the windowed floor, but a bigger hand can move it in
+      // there, so lay the windows for a cut placed mid-floor and check they keep clear of it
+      for (const xc of [(R.tindeqRun[0] + R.xS0) / 2, ...R.cuts]) {
+        const ws2 = floorWindows({ ...R, cuts: [xc] });
+        for (const w of ws2) if (w.x1 > xc - 10 && w.x0 < xc + 10) fail(`${tag}: floor window at x=${((w.x0 + w.x1) / 2).toFixed(0)} too close to the joint at x=${xc.toFixed(0)}`);
+      }
+      const xmid = (R.tindeqRun[0] + R.tindeqRun[1]) / 2;
+      if (!solidAt(rig, [xmid, R.Yc, zf], 1.5)) fail(`${tag}: no solid spine under the cord line`);
+    }
     // compact: the platform ends just past the carriage, and the spring seat blocks sit beside
     // the Tindeq's run (not behind it), solid each side, clear in the middle
     if (R.xEnd > R.tindeqRun[1] + ADDON_DIM.spring.endGap + ADDON_DIM.spring.carriage + ADDON_DIM.spring.tail + 0.1) fail(`${tag}: the platform runs on past the carriage`);

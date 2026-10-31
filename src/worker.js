@@ -61,7 +61,7 @@ function cordGhosts(R, xFrom, lift, load) {
 }
 
 function addonInfo(kind, R, parts) {
-  const grams = parts.reduce((g, p) => g + massG(replicad.measureVolume(p.shape)), 0);
+  const grams = parts.reduce((g, p) => g + massG(replicad.measureVolume(p.shape), replicad.measureArea(p.shape)), 0);
   const base = { kind, grams, pieces: parts.map((p) => p.name), screen: R.screen };
   if (kind === "foot") return { ...base, size: [R.len, R.width], gap: R.gap, apex: R.apex };
   const info = { ...base, length: Math.round(R.xEnd), width: Math.round(2 * R.outer), joints: R.cuts.length, guideBolt: R.guideBolt, travel: ADDON_DIM.travel, palmHeight: R.Zp };
