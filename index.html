@@ -69,13 +69,52 @@
 
           <details class="how">
             <summary>How do I measure?</summary>
+            <svg class="how-fig" viewBox="0 0 360 262" role="img" aria-label="A finger seen from the palm side, showing where each measurement starts and ends">
+              <defs>
+                <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1 L10 5 L0 9 z" fill="#f28c38" /></marker>
+              </defs>
+              <!-- palm side up: palm behind, finger on top -->
+              <path d="M70 262 L74 222 Q80 212 120 212 L180 212 Q220 212 226 222 L230 262 Z" fill="#232833" stroke="#4a5160" />
+              <path d="M123 214 L127 46 Q129 16 150 16 Q171 16 173 46 L177 214 Z" fill="#2c323e" stroke="#9aa1ad" stroke-width="1.5" />
+              <text x="150" y="246" text-anchor="middle" font-size="12" fill="#9aa1ad">palm (palm side up)</text>
+              <!-- creases -->
+              <g stroke="#cfd5de" stroke-width="1.8" fill="none" stroke-linecap="round">
+                <path d="M129 75 Q150 80 171 75" />
+                <path d="M128 140 Q150 145 172 140" />
+                <path d="M125 204 Q150 210 175 204" />
+              </g>
+              <g font-size="11" fill="#9aa1ad">
+                <text x="118" y="80" text-anchor="end">end-joint crease</text>
+                <text x="118" y="145" text-anchor="end">middle-joint crease</text>
+                <text x="118" y="196" text-anchor="end">crease where the</text>
+                <text x="118" y="208" text-anchor="end">finger meets the palm</text>
+              </g>
+              <!-- extension lines -->
+              <g stroke="#4a5160" stroke-dasharray="3 3">
+                <line x1="152" y1="16" x2="306" y2="16" /><line x1="174" y1="77" x2="238" y2="77" />
+                <line x1="175" y1="142" x2="238" y2="142" /><line x1="178" y1="207" x2="306" y2="207" />
+              </g>
+              <!-- dimensions -->
+              <g stroke="#f28c38" stroke-width="1.6" marker-start="url(#arw)" marker-end="url(#arw)">
+                <line x1="230" y1="18" x2="230" y2="75" />
+                <line x1="230" y1="79" x2="230" y2="140" />
+                <line x1="300" y1="18" x2="300" y2="205" />
+                <line x1="129" y1="50" x2="171" y2="50" />
+              </g>
+              <g font-size="12" font-weight="600" fill="#e7e9ee">
+                <text x="236" y="50">Tip</text>
+                <text x="236" y="114">Middle</text>
+                <text x="306" y="116">Length</text>
+                <text x="118" y="54" text-anchor="end">Width</text>
+              </g>
+            </svg>
             <ol>
               <li>Palm up, hand flat, fingers straight. A ruler or calipers, in millimetres.</li>
               <li><b>Length:</b> the crease where the finger meets the palm, to the very tip.</li>
-              <li><b>Middle:</b> middle knuckle crease to the end-joint crease.</li>
+              <li><b>Middle:</b> middle-joint crease to the end-joint crease. If a crease has two lines, measure from the middle of the two.</li>
               <li><b>Tip:</b> end-joint crease to the very tip.</li>
-              <li><b>Width:</b> widest point of the tip segment, side to side.</li>
-              <li>Measure twice and use the average. Half millimetres are fine.</li>
+              <li><b>Width:</b> widest point of the tip section, side to side.</li>
+              <li>Measure twice and use the average. You can enter half millimetres (like 18.5).</li>
             </ol>
           </details>
 

@@ -38,6 +38,7 @@ input:invalid { border-color: var(--bad); }
 .how { margin: 14px 0; color: var(--muted); line-height: 1.5; }
 .how summary { cursor: pointer; color: var(--text); }
 .how ol { padding-left: 18px; }
+.how-fig { display: block; width: 100%; max-width: 300px; margin: 10px auto 2px; }
 .problems { color: var(--bad); padding-left: 18px; margin: 10px 0; line-height: 1.45; }
 .actions { display: flex; gap: 10px; margin-top: 16px; }
 button {
